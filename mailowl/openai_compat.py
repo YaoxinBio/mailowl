@@ -17,7 +17,7 @@ from typing import Any, Awaitable, Callable
 
 import httpx
 
-from .config import Config
+from .config import Config, lang_directive
 from .db import DB, now
 from .llm import RESEARCH_SYSTEM, AgentResult, LLMError, SessionMissing
 from .tools import MailTools
@@ -261,7 +261,8 @@ class OpenAIChat:
                 res = {"error": str(e)}
             return json.dumps(res, ensure_ascii=False)
 
-        messages = [{"role": "system", "content": RESEARCH_SYSTEM}, {"role": "user", "content": question}]
+        messages = [{"role": "system", "content": f"{RESEARCH_SYSTEM}\n{lang_directive(self.cfg)}"},
+                    {"role": "user", "content": question}]
         text, _, _ = await self.tool_loop(messages, to_openai_tools(specs), run_tool,
                                           model=self.cfg.llm.research_model or self.cfg.llm.agent_model,
                                           timeout=timeout or self.cfg.llm.agent_timeout, kind="research")

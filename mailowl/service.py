@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 from . import cards
 from .attachments import AttachmentError, chain_files, purge_chain_files, store_file
 from .bark import Bark, BarkItem, combine, in_quiet_hours
-from .config import Account, Config
+from .config import Account, Config, lang_directive
 from .db import DB, now
 from .fetch import sync_account
 from .llm import LLMError, SessionMissing
@@ -27,7 +27,7 @@ from .triage import LEVEL_NAMES, triage_mail
 
 log = logging.getLogger(__name__)
 
-AGENT_SYSTEM = """你是用户的私人邮件助理，通过飞书和用户对话。用户在手机上阅读，回答要简洁、直接，用简体中文。
+AGENT_SYSTEM = """你是用户的私人邮件助理，通过飞书和用户对话。用户在手机上阅读，回答要简洁、直接。
 你可以用 mail 工具查询用户的本地邮件库（含历史邮件和用户发出的邮件）、保存回复草稿、创建待办、标记邮件状态、记录发件人偏好。你不能直接上网。
 
 规则：
@@ -523,6 +523,11 @@ class Service:
         return out
 
     # ------------------------------------------------------------------ Agent
+    @property
+    def agent_system(self) -> str:
+        tail = "Drafts still follow the language of the original email." if self.cfg.language == "en" else "草稿正文仍跟随原邮件的语言。"
+        return f"{AGENT_SYSTEM}\n{lang_directive(self.cfg)} {tail}"
+
     def agent_prompt(self, text: str, mail_id: int | None, first: bool) -> str:
         parts = [f"[当前时间 {fmt_ts(self.cfg, now())}]"]
         if first:
@@ -556,11 +561,11 @@ class Service:
                 sid = sess["session_id"] if sess else None
                 try:
                     res = await self.llm.agent(self.agent_prompt(text, mail_id, sid is None), scope=scope,
-                                               session_id=sid, system=AGENT_SYSTEM)
+                                               session_id=sid, system=self.agent_system)
                 except SessionMissing:
                     self.db.drop_session(scope)
                     res = await self.llm.agent(self.agent_prompt(text, mail_id, True), scope=scope,
-                                               session_id=None, system=AGENT_SYSTEM)
+                                               session_id=None, system=self.agent_system)
                 self.db.save_session(scope, res.session_id)
                 self.db.log_action("llm_cost", mail_id, {"usd": res.cost_usd, "kind": "agent", "turns": res.turns})
                 if res.text:

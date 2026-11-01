@@ -20,7 +20,7 @@
 
 
 <p align="center">
-  <img src="assets/demo.gif" alt="mailowl demo" width="760"><br>
+  <img src="assets/demo-zh.gif" alt="mailowl demo" width="760"><br>
   <sub><code>mailowl demo</code> 的真实输出（邮件均为虚构）：分级、按过去往来起草回复、一封藏着恶意指令的邮件无从下手。</sub>
 </p>
 
@@ -134,7 +134,7 @@ mailowl service install   # 装成后台服务（登录后自动启动，崩溃�
 - 目前仅支持 macOS（依赖 `launchd`），暂未提供 Linux / Docker 部署方案。
 - 邮箱需支持授权码登录：仅允许 OAuth 的 Outlook / Hotmail 暂不能直接接入，可以先自动转发到支持的邮箱（见安装文档）；Gmail 需配合应用专用密码使用，暂不支持 OAuth。
 - 聊天端目前仅支持飞书，Lark 国际版尚未测试。
-- 界面文案与内置提示词目前均为中文。
+- 模型写给你的摘要和回答可以设成中文或英文（`language = "en"`），但飞书卡片和按钮文字目前还是中文。
 
 ## 路线图
 

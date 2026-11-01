@@ -134,7 +134,7 @@ MailOwl is in an early stage. The core workflow is **verified end-to-end on real
 - macOS only (`launchd`); no Linux or Docker packaging yet.
 - Mailboxes must support app-password login: Outlook/Hotmail (OAuth-only) are not supported directly — auto-forward them to a supported mailbox as a workaround (see the setup guide). Gmail works via app password, with no OAuth support yet.
 - The chat interface is Feishu/Lark only, and Lark (international) has not been tested.
-- UI text and built-in prompts are currently in Chinese.
+- Model output (summaries, answers) follows `language = "en"` or `"zh"`, but chat-card labels and buttons are still in Chinese.
 
 ## Roadmap
 

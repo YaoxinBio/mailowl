@@ -24,3 +24,13 @@ def test_service_status_when_not_installed(cfg, monkeypatch, capsys):
     monkeypatch.setattr(sys, "platform", "darwin")
     assert main(["--config", str(cfg.path), "service", "status"]) == 0
     assert "未安装" in capsys.readouterr().out
+
+
+def test_demo_runs_offline_in_both_languages(monkeypatch, tmp_path, capsys):
+    import asyncio
+    from mailowl.demo import run_demo
+    from mailowl.llm import FakeLLM
+    monkeypatch.setenv("MAILOWL_CONFIG", str(tmp_path / "none.toml"))     # 不读真实配置
+    for lang, word in (("en", "Emails sent: 0"), ("zh", "已发出的邮件：0 封")):
+        assert asyncio.run(run_demo(lang=lang, llm=FakeLLM())) == 0
+        assert word in capsys.readouterr().out

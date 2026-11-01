@@ -18,6 +18,16 @@ class ConfigError(Exception):
     pass
 
 
+LANG_DIRECTIVE = {
+    "zh": "所有写给用户的文字（摘要、分析、回答）用简体中文。",
+    "en": "Write everything addressed to the user (summaries, analysis, answers) in English.",
+}
+
+
+def lang_directive(cfg: "Config") -> str:
+    return LANG_DIRECTIVE.get(cfg.language, LANG_DIRECTIVE["zh"])
+
+
 @dataclass
 class Account:
     name: str
@@ -139,6 +149,7 @@ class Config:
     data_dir: Path
     timezone: str = "Asia/Shanghai"
     profile: str = ""
+    language: str = "zh"              # zh | en：模型写给用户的摘要、分析、回答用哪种语言（草稿仍跟随原邮件语言）
     signature: str = ""               # 署名习惯（自由文字），对话 Agent 起草时遵守
     max_message_bytes: int = 3_000_000
     llm: LLMConfig = field(default_factory=LLMConfig)
@@ -254,7 +265,7 @@ def load_config(path: str | os.PathLike | None = None) -> Config:
     if len({x.name for x in sigs}) != len(sigs):
         raise ConfigError("[[signatures]] 的 name 有重复")
 
-    general_known = {"timezone", "profile", "signature", "max_message_bytes"}
+    general_known = {"timezone", "profile", "language", "signature", "max_message_bytes"}
     unknown = set(general) - general_known
     if unknown:
         raise ConfigError(f"[general] 中有未知配置项: {', '.join(sorted(unknown))}")
@@ -297,6 +308,8 @@ def load_config(path: str | os.PathLike | None = None) -> Config:
             raise ConfigError("[llm.triage] 用 openai 时要写 base_url 和 model，例如本地 Ollama：http://127.0.0.1:11434/v1")
         if t["backend"] == "openai" and t["model"] in CLAUDE_ALIASES:
             raise ConfigError("[llm.triage] 的 model 要写该服务的模型名，haiku/sonnet/opus 只适用于 claude_cli")
+    if cfg.language not in LANG_DIRECTIVE:
+        raise ConfigError("[general] language 只能是 zh 或 en")
     if cfg.bark.content not in ("full", "minimal"):
         raise ConfigError("[bark] content 只能是 full 或 minimal")
     if cfg.routing.level1 not in ("digest", "immediate"):

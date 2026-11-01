@@ -4,6 +4,7 @@
 [general]
 data_dir = "~/.local/share/mailowl"   # 数据库、日志、Agent 会话
 timezone = "Asia/Shanghai"
+language = "zh"                         # zh / en：模型写给你的摘要、分析、回答用哪种语言（草稿仍跟随原邮件语言）
 # 可选：一两句话介绍你自己和当前在做的事，帮助模型判断什么重要、草稿怎么署名；留空也能用
 # 例：profile = "XX 大学 XX 方向博士生，正在申请 XX 基金；导师 XX；英文署名 XX"
 profile = ""
