@@ -1,5 +1,7 @@
 # MailOwl 接入步骤
 
+[English](SETUP.en.md)
+
 MailOwl 跑在一台常开的 Mac 上（下文叫「运行机」，比如家里的 Mac mini）。配置文件在 `~/.config/mailowl/`，数据在 `~/.local/share/mailowl/`。
 
 ## 0. 安装

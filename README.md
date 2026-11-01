@@ -1,80 +1,124 @@
 <p align="center">
-  <img src="assets/logo.svg" width="128" alt="MailOwl logo">
+  <img src="assets/logo.svg" width="120" alt="MailOwl logo">
 </p>
 
 <h1 align="center">MailOwl</h1>
 
-<p align="center">跑在你自己 Mac 上的私人邮件秘书：替你盯着多个邮箱、分清轻重，<br>在飞书里帮你查往来、起草回复，<b>你点头才发出</b>；紧急的事让 iPhone 响。</p>
+<p align="center">
+  <b>A local-first AI email secretary that drafts in your voice and never sends without your say-so.</b><br>
+  Watches every inbox on your Mac, filters out the noise, and brings actionable threads to your chat app — where replies wait for your explicit <i>Confirm</i>.
+</p>
+
+<p align="center">
+  <a href="https://github.com/YaoxinBio/mailowl/actions/workflows/ci.yml"><img src="https://github.com/YaoxinBio/mailowl/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/platform-macOS-lightgrey.svg" alt="macOS">
+</p>
+
+<p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a></p>
 
 ---
 
-## 它做什么
+## Why MailOwl
 
-- **任何邮箱**：只要支持 IMAP 或 POP3 就能接，几个邮箱一起管；只读收信，不标已读、不删信。
-- **分清轻重**：每封新邮件由模型读一遍，给出级别、一句话摘要、截止时间和要做的事（分级见下表）。
-- **在飞书里处理**：回复某张邮件卡片就能针对那封邮件提问（「我之前交过 CV 吗？」），Agent 会翻往来邮件并给出依据。
-- **起草回复**：草稿卡片可以按意见改版（「第二段太啰嗦」），落款「熟人 / 正式 / 英文」一键切换，回复卡片时发文件即可加附件。
-- **你点头才发出**：Agent 没有发信能力，只能写草稿；点「确认发送」并二次确认后才从原邮箱发出，同一份草稿只会发一次，回信在对方那边归入原邮件的往来。
-- **隐私与安全**：邮件全文只存在你的 Mac 上，飞书只收摘要；能读邮件的 Agent 不能上网，需要查网上资料时要你在卡片上同意，再交给一个读不到邮箱的研究 Agent。
-- **模型可换**：默认用本机已登录的 Claude Code；也可以接任何 OpenAI 兼容接口（DeepSeek、通义千问、Kimi、GPT、Grok、OpenRouter、本地 Ollama）。
+Giving an AI access to your email usually forces an ugly trade-off: hand your entire inbox to a third-party cloud just to get shallow summaries, or give an autonomous agent SMTP access and pray it doesn't hallucinate a commitment or fall for a prompt injection.
 
-| 级别 | 例子 | 通知方式 |
+MailOwl takes a different approach:
+
+- **Runs on your Mac, stays on your Mac** — Every message lives in a local SQLite database. Your inbox is never synced to a vendor's cloud; only the message being triaged or answered is sent to the model you choose.
+- **Goes beyond summaries** — Before drafting a reply, MailOwl searches your past correspondence with that contact, matches the thread's language, and applies your signature templates so the draft actually reads like you wrote it.
+- **Capability-isolated by architecture** — The agent that reads your mail **has no send tool and no web access**. It cannot send an email, and it cannot open a web page to smuggle your data out. Outbound mail happens strictly outside the agent loop, only when you tap *Confirm*, and at most once per draft.
+
+## How It Works
+
+<p align="center">
+  <img src="assets/architecture.svg" alt="MailOwl architecture" width="900">
+</p>
+
+1. **Fetch** — Polls your mailboxes every few minutes over read-only IMAP/POP3. It never marks messages as read and never deletes anything on the server.
+2. **Triage** — An LLM evaluates each new arrival and extracts a priority level (`0`–`3`), a one-line summary, any deadline, and concrete action items.
+3. **Notify** — Routes each message by urgency: batches low-priority mail into a twice-daily digest, pushes an interactive card to your chat app, or fires an urgent phone alert that re-rings if ignored.
+4. **Act** — Reply directly to a chat card to query your inbox history, generate or revise a draft, swap signatures with one tap, attach files, and confirm to send.
+
+| Level | Typical mail | What happens |
 |---|---|---|
-| 0 广告 / 订阅 | 电商、账单、期刊推送 | 只进每天早晚的摘要 |
-| 1 值得一读 | 组会通知、公告 | 进摘要 |
-| 2 需要处理 | 要你回复、交材料 | 即时飞书卡片 + iPhone 提醒，自动建待办 |
-| 3 紧急 | 48 小时内截止 | 即时卡片 + 时效性提醒（专注模式下也响），20 分钟没处理再次响铃 |
+| **0 · Notification** | Newsletters, receipts, promotions | Batched into morning / evening digest only |
+| **1 · Worth reading** | Announcements, meeting notices | Included in digest |
+| **2 · Needs action** | A reply or document is expected | Instant chat card + phone alert; todo created automatically |
+| **3 · Urgent** | Deadline within 48 hours | Instant chat card + time-sensitive phone alert; rings again after 20 min if unhandled |
 
-```
-邮箱（IMAP/POP3，只读）──每 3 分钟──▶ 你的 Mac（后台服务，SQLite 本地存储）
-                                          │
-                                模型分级：级别 / 摘要 / 截止 / 待办
-                                          │
-          ┌───────────────────────────────┼──────────────────────────┐
-          ▼                               ▼                          ▼
-   0/1 级：早晚摘要              2 级：飞书卡片 + Bark        3 级：卡片 + 响铃升级
-                                          │
-             飞书里：提问 → 起草 → 修改 → 换落款 → 确认发送（SMTP，只发一次）
-```
+## Features
 
-飞书机器人走 WebSocket 长连接，**不需要公网 IP、不用开端口**。
+- **Any IMAP/POP3 mailbox** — Connect any mailbox that supports IMAP or POP3 with an app password, and manage multiple accounts side by side.
+- **Talk to your inbox history** — Reply to a thread card with questions like *"Did I already send them my CV?"* The agent searches your sent mail and cites the exact messages in its answer.
+- **Drafts that sound like you** — Replies automatically match the thread's language, draw on your past emails with the same recipient for context and tone, and let you switch signature templates (*casual*, *formal*, *English*) with a single tap.
+- **Automatic todos & follow-ups** — Action items with deadlines become tracked todos automatically, trigger reminders before they come due, and close themselves as soon as your reply goes out.
+- **Quiet by default** — Non-urgent notifications stay silent overnight, burst arrivals are coalesced into a single alert, and hourly notifications are hard-capped.
+- **Bring your own model** — Run against the local Claude Code CLI already logged in on your Mac, or point MailOwl at any OpenAI-compatible API.
+- **Zero open ports** — The chat bot connects via an outbound WebSocket, so your Mac requires no public IP, port forwarding, or reverse proxy.
 
-## 开始使用
+## Safety by Design
 
-见 [docs/SETUP.md](docs/SETUP.md)：安装 → 邮箱授权码 → 飞书自建应用机器人 → Bark → 启动。
+MailOwl treats incoming email as untrusted input and enforces boundaries in code rather than prompts:
 
-```bash
-mailowl check      # 逐项检查邮箱、模型、飞书、Bark
-mailowl fetch      # 首次收信：最近 30 天存为历史，不推送
-mailowl pair       # 飞书配对码
-mailowl run        # 前台运行（正式使用见 deploy/install-launchd.sh）
-```
+| Threat | Architectural defense |
+|---|---|
+| **Unapproved or duplicate sending** | The mail-reading agent has no send tool. Sending requires tapping *Confirm* followed by a second confirmation dialog. Each draft is locked to a single send, and ambiguous SMTP outcomes are never retried automatically. |
+| **Prompt injection & inbox exfiltration** | The agent that reads mail cannot access the web. Web research is delegated to a separate, inbox-blind agent — and only runs after you approve the exact search question. |
+| **Inbox leakage to third-party clouds** | All messages stay in local SQLite. Your chat app receives only the sender, subject, and summary by default (full body is sent only when you ask). You can also block specific senders or keywords from ever reaching the model. |
+| **Unauthorized chat access** | The bot binds to a single user account via a one-time pairing code and refuses everyone else. |
 
-## 现状
-
-以下功能已在真机上验证：收发信、飞书配对与对话、全部卡片按钮、草稿改版与一键换落款、确认发送只发一次、回信线程头、自动待办、Bark 推送与点击跳转、联网研究审批。
-
-还没做或没在真机上验证的：
-
-- OpenAI 兼容后端只跑过模拟测试，还没对真实的 DeepSeek / 千问 / GPT 接口跑过；Tavily 搜索未验证。
-- 只支持 macOS（launchd 常驻）；Linux / Docker 还没做。
-- 需要邮箱支持用密码或授权码登录 IMAP/SMTP：Outlook / Hotmail 目前接不了（微软只允许 OAuth）；Gmail 用「应用专用密码」，暂不支持 OAuth 登录。
-- 界面目前只有飞书（含 Lark 国际版，改 `domain` 即可）。
-
-截图待补。
-
-## 开发
+## Quick Start
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -e '.[test]'
-.venv/bin/python -m pytest -q
+git clone https://github.com/YaoxinBio/mailowl.git && cd mailowl
+python3 -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/mailowl init     # config templates in ~/.config/mailowl/
+.venv/bin/mailowl check    # verify mailboxes, model, chat bot, Bark
+.venv/bin/mailowl fetch    # first fetch: last 30 days stored as history, no alerts
+bash deploy/install-launchd.sh
 ```
 
-代码结构：`mailowl/service.py` 主流程，`fetch.py` 收信，`triage.py` 分级，`tools.py` Agent 的邮件工具，`llm.py` / `openai_compat.py` 模型后端，`cards.py` 飞书卡片，`web.py` 研究 Agent 的联网工具。
+For step-by-step configuration (mailbox app passwords, Feishu/Lark bot setup, and Bark push alerts), see **[docs/SETUP.en.md](docs/SETUP.en.md)**.
 
-## English
+## Models
 
-MailOwl is a self-hosted email assistant that runs on your own Mac. It watches several IMAP/POP3 mailboxes, triages every new message into four levels with an LLM, and talks to you through a Feishu/Lark bot: ask about a thread, get a draft reply, revise it, switch signatures, and send it — only after you tap *Confirm*. The agent has no send tool, each draft can be sent at most once, and the agent that reads your mail cannot browse the web (web research goes through a separate, mailbox-less agent after your approval). Urgent mail rings your iPhone via Bark. Works with the local Claude Code CLI or any OpenAI-compatible API. The UI and docs are currently in Chinese.
+| Backend | Configure | Notes |
+|---|---|---|
+| **Claude Code CLI** (default) | `backend = "claude_cli"` | Reuses the Claude Code CLI session already logged in on the host |
+| **OpenAI-compatible** | `backend = "openai"`, `base_url`, `api_key` | DeepSeek, Qwen, Kimi, OpenAI, Grok, OpenRouter, Ollama, etc. (requires function calling) |
+
+## Status
+
+MailOwl is in an early stage. The core workflow is **verified end-to-end on real devices**:
+
+- Fetching and sending across multiple mailboxes
+- Feishu pairing, interactive chat, and every card action
+- Draft revisions, one-tap signature switching, and proper reply threading headers
+- Strictly-once sending enforcement
+- Automatic todo creation, Bark push alerts with tap-to-open, and the gated web-research approval flow
+
+**Not yet implemented or verified:**
+
+- The OpenAI-compatible backend is currently covered by mocked tests only; web search via Tavily is unverified.
+- macOS only (`launchd`); no Linux or Docker packaging yet.
+- Mailboxes must support app-password login: Outlook/Hotmail (OAuth-only) are not supported; Gmail works via app password, with no OAuth support yet.
+- The chat interface is Feishu/Lark only, and Lark (international) has not been tested.
+- UI text and built-in prompts are currently in Chinese.
+
+## Roadmap
+
+- [ ] Local web console — setup wizard, mailbox status, and settings; later wrapped as a macOS menu-bar app
+- [ ] Telegram as a second chat interface
+- [ ] Linux / Docker support
+- [ ] Gmail OAuth login
+- [ ] English UI and prompts
+- [ ] PyPI release
+
+## Contributing
+
+Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Please report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 

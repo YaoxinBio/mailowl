@@ -1,7 +1,7 @@
 [project]
 name = "mailowl"
 version = "0.1.0"
-description = "跑在自己 Mac 上的私人邮件秘书：多邮箱分级、飞书里查往来起草回复、确认后才发送、Bark 紧急提醒"
+description = "A self-hosted AI email secretary that never sends without you: multi-mailbox triage, drafts in Feishu/Lark, confirm-to-send, Bark alerts"
 readme = "README.md"
 license = "MIT"
 authors = [{name = "Yaoxin Zhang"}]
