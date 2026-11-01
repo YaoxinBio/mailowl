@@ -8,7 +8,7 @@ authors = [{name = "Yaoxin Zhang"}]
 requires-python = ">=3.11"
 dependencies = [
     "lark-channel-sdk>=1.4,<2",
-    "httpx>=0.24,<1",
+    "httpx[socks]>=0.24,<1",            # socks：很多人的 all_proxy 是 socks5
 ]
 
 [project.optional-dependencies]

@@ -71,6 +71,16 @@ MailOwl treats incoming email as untrusted input and enforces boundaries in code
 
 ## Quick Start
 
+**Try it in 30 seconds — no mailbox, no chat bot needed.** `mailowl demo` triages four fictional emails, drafts a reply from past correspondence, and shows a prompt-injection email failing to make the agent send anything:
+
+```bash
+uv tool install git+https://github.com/YaoxinBio/mailowl
+mailowl demo                                                    # uses your Claude Code login
+mailowl demo --base-url http://127.0.0.1:11434/v1 --model qwen3  # or a local Ollama model
+```
+
+Then connect your own mailboxes:
+
 ```bash
 uv tool install git+https://github.com/YaoxinBio/mailowl   # or: pipx install git+https://github.com/YaoxinBio/mailowl
 mailowl init              # config templates in ~/.config/mailowl/
@@ -86,7 +96,8 @@ For step-by-step configuration (mailbox app passwords, Feishu/Lark bot setup, an
 | Backend | Configure | Notes |
 |---|---|---|
 | **Claude Code CLI** (default) | `backend = "claude_cli"` | Reuses the Claude Code CLI session already logged in on the host |
-| **OpenAI-compatible** | `backend = "openai"`, `base_url`, `api_key` | DeepSeek, Qwen, Kimi, OpenAI, Grok, OpenRouter, Ollama, etc. (requires function calling) |
+| **OpenAI-compatible** | `backend = "openai"`, `base_url`, `api_key` | DeepSeek, Qwen, Kimi, OpenAI, Grok, OpenRouter, etc. (requires function calling) |
+| **Local model (Ollama, LM Studio …)** | `backend = "openai"`, `base_url = "http://127.0.0.1:11434/v1"` | mail text never leaves your Mac for inference; tested with a 27B Qwen model |
 
 ## Status
 
@@ -100,7 +111,7 @@ MailOwl is in an early stage. The core workflow is **verified end-to-end on real
 
 **Not yet implemented or verified:**
 
-- The OpenAI-compatible backend is currently covered by mocked tests only; web search via Tavily is unverified.
+- The OpenAI-compatible backend is verified with a local Ollama model; hosted APIs (DeepSeek, OpenAI, …) have not been tested live yet, and web search via Tavily is unverified.
 - macOS only (`launchd`); no Linux or Docker packaging yet.
 - Mailboxes must support app-password login: Outlook/Hotmail (OAuth-only) are not supported directly — auto-forward them to a supported mailbox as a workaround (see the setup guide). Gmail works via app password, with no OAuth support yet.
 - The chat interface is Feishu/Lark only, and Lark (international) has not been tested.

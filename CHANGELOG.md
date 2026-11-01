@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- `mailowl demo`: zero-config demo with fictional mail (triage, drafting from history, prompt-injection email).
+- `mailowl service install|uninstall|status|restart|logs`; works with `uv tool install` / `pipx`.
+- Config templates ship inside the package, so `mailowl init` works from any install.
+- OpenAI-compatible backend verified with a local Ollama model; local/LAN model URLs bypass proxies; SOCKS proxies supported.
+- Docs: forwarding workaround for mailboxes without app passwords.
+
 ## 0.1.0 — 2026-11-01
 
 First public version.

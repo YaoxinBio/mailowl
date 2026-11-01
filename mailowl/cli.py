@@ -318,6 +318,12 @@ def cmd_service(args) -> int:
     return 0
 
 
+def cmd_demo(args) -> int:
+    """不接邮箱、不配飞书，用虚构邮件演示分级、起草和恶意邮件拦截。"""
+    from .demo import run_demo
+    return asyncio.run(run_demo(args.base_url, args.model, args.keep))
+
+
 def cmd_cards(args) -> int:
     """导出示例卡片 JSON，可粘贴到飞书「卡片搭建工具」里预览。"""
     from . import cards
@@ -373,6 +379,10 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--level", default="timeSensitive")
     c = sub.add_parser("cards", help="导出示例卡片 JSON")
     c.add_argument("--out", default="tmp/cards")
+    dm = sub.add_parser("demo", help="不接邮箱、不配飞书，用虚构邮件演示一遍")
+    dm.add_argument("--base-url", help="OpenAI 兼容接口，例如 http://127.0.0.1:11434/v1（Ollama）；密钥用环境变量 MAILOWL_LLM_API_KEY")
+    dm.add_argument("--model", help="模型名（配合 --base-url；用 Claude Code 时可写 haiku/sonnet/opus）")
+    dm.add_argument("--keep", action="store_true", help="保留演示用的临时目录")
     sv = sub.add_parser("service", help="后台服务：install / uninstall / status / restart / logs")
     sv.add_argument("action", choices=["install", "uninstall", "status", "restart", "logs"])
     sv.add_argument("--no-check", action="store_true", help="install 时跳过 mailowl check")
@@ -389,7 +399,8 @@ def main(argv: list[str] | None = None) -> int:
         logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
     handlers = {"init": cmd_init, "check": cmd_check, "run": cmd_run, "pair": cmd_pair, "fetch": cmd_fetch,
                 "triage": cmd_triage, "agent": cmd_agent, "bark-test": cmd_bark_test, "cards": cmd_cards,
-                "folders": cmd_folders, "service": cmd_service}
+                "folders": cmd_folders, "service": cmd_service,
+                "demo": cmd_demo}
     try:
         return handlers[args.cmd](args)
     except ConfigError as e:

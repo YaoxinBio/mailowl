@@ -26,6 +26,20 @@ from .web import WebError, web_fetch, web_search
 log = logging.getLogger(__name__)
 
 RETRY_STATUS = {408, 409, 429, 500, 502, 503, 504}
+
+
+def is_local_url(url: str) -> bool:
+    """本机或局域网里的模型服务（Ollama、LM Studio 等）：不走 http(s)_proxy / all_proxy。"""
+    import ipaddress
+    from urllib.parse import urlparse
+    host = (urlparse(url).hostname or "").lower()
+    if host in ("localhost",) or host.endswith((".local", ".lan")):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_private or ip.is_link_local
 TOOL_RESULT_MAX = 20000
 
 Executor = Callable[[str, dict[str, Any]], Awaitable[str]]
@@ -132,7 +146,8 @@ class OpenAIChat:
         last = ""
         for attempt in range(3):
             try:
-                async with httpx.AsyncClient(timeout=timeout, transport=self.transport) as c:
+                async with httpx.AsyncClient(timeout=timeout, transport=self.transport,
+                                             trust_env=not is_local_url(self.base)) as c:
                     r = await c.post(f"{self.base}/chat/completions", json=body, headers=headers)
             except httpx.HTTPError as e:
                 last = f"{type(e).__name__}: {e}"

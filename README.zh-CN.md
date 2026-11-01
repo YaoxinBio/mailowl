@@ -71,6 +71,16 @@ MailOwl 默认把所有外来邮件视为不可信输入，用代码边界而非
 
 ## 快速开始
 
+**先花 30 秒看效果，不用接邮箱、不用配飞书。** `mailowl demo` 会给 4 封虚构邮件分级，按过去的往来起草一封回复，再演示一封藏着恶意指令的邮件如何让 Agent 无从下手：
+
+```bash
+uv tool install git+https://github.com/YaoxinBio/mailowl
+mailowl demo                                                    # 用本机已登录的 Claude Code
+mailowl demo --base-url http://127.0.0.1:11434/v1 --model qwen3  # 或者本地 Ollama 模型
+```
+
+然后接入你自己的邮箱：
+
 ```bash
 uv tool install git+https://github.com/YaoxinBio/mailowl   # 或者：pipx install git+https://github.com/YaoxinBio/mailowl
 mailowl init              # 在 ~/.config/mailowl/ 生成配置模板
@@ -86,7 +96,8 @@ mailowl service install   # 装成后台服务（登录后自动启动，崩溃�
 | 后端 | 配置 | 说明 |
 |---|---|---|
 | **Claude Code CLI**（默认） | `backend = "claude_cli"` | 直接复用宿主机上已登录的 Claude Code CLI |
-| **OpenAI 兼容接口** | `backend = "openai"`、`base_url`、`api_key` | 支持 DeepSeek、通义千问、Kimi、OpenAI、Grok、OpenRouter、Ollama 等（模型需支持工具调用） |
+| **OpenAI 兼容接口** | `backend = "openai"`、`base_url`、`api_key` | 支持 DeepSeek、通义千问、Kimi、OpenAI、Grok、OpenRouter 等（模型需支持工具调用） |
+| **本地模型（Ollama、LM Studio 等）** | `backend = "openai"`、`base_url = "http://127.0.0.1:11434/v1"` | 邮件内容不出本机；已用 27B 的 Qwen 实测 |
 
 ## 现状
 
@@ -100,7 +111,7 @@ mailowl service install   # 装成后台服务（登录后自动启动，崩溃�
 
 **尚未完成或待验证：**
 
-- OpenAI 兼容后端目前仅跑过模拟测试（Mock Tests）；基于 Tavily 的网页搜索尚未真机验证。
+- OpenAI 兼容后端已用本地 Ollama 模型实测；DeepSeek、OpenAI 等在线接口还没实测，基于 Tavily 的网页搜索尚未验证。
 - 目前仅支持 macOS（依赖 `launchd`），暂未提供 Linux / Docker 部署方案。
 - 邮箱需支持授权码登录：仅允许 OAuth 的 Outlook / Hotmail 暂不能直接接入，可以先自动转发到支持的邮箱（见安装文档）；Gmail 需配合应用专用密码使用，暂不支持 OAuth。
 - 聊天端目前仅支持飞书，Lark 国际版尚未测试。

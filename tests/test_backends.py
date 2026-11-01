@@ -220,3 +220,11 @@ def test_web_fetch_rechecks_redirects():
     assert "Deadline: Jan 20" in out["content"]
     with pytest.raises(WebError):
         run(web_fetch("https://example.org/go", transport=t, resolve=res))
+
+
+def test_local_model_urls_bypass_proxy():
+    from mailowl.openai_compat import is_local_url
+    for u in ("http://127.0.0.1:11434/v1", "http://localhost:1234/v1", "http://192.168.1.20:8000/v1", "http://mini.local:11434/v1"):
+        assert is_local_url(u), u
+    for u in ("https://api.deepseek.com/v1", "https://api.openai.com/v1", "https://8.8.8.8/v1"):
+        assert not is_local_url(u), u
