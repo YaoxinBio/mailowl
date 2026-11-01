@@ -624,7 +624,14 @@ class Service:
         a = v.get("a")
         mail_id, draft_id, todo_id, research_id = v.get("m"), v.get("d"), v.get("t"), v.get("r")
         msg_id = ev.message_id
-        log.info("卡片操作 %s m=%s d=%s t=%s", a, mail_id, draft_id, todo_id)
+        log.info("卡片操作 %s m=%s d=%s t=%s r=%s", a, mail_id, draft_id, todo_id, research_id)
+        gone = ((mail_id and self.db.mail(mail_id) is None) or (draft_id and self.db.draft(draft_id) is None)
+                or (todo_id and self.db.q1("SELECT id FROM todos WHERE id=?", (todo_id,)) is None)
+                or (research_id and self._research(research_id) is None))
+        if gone:  # 卡片对应的记录已被删除（例如清理过数据）：别报错，把卡片标成失效
+            log.info("卡片 %s 对应的记录已不存在", msg_id)
+            await self.bot.update_card(msg_id, cards.status_card("这张卡片已失效", ["对应的邮件、草稿、待办或请求已经不存在了。"], "grey"))
+            return
         if mail_id:
             self.db.update_mail(mail_id, acked_at=now())
         try:

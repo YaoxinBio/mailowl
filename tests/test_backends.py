@@ -263,3 +263,16 @@ def test_bark_minimal_content_hides_mail(cfg, monkeypatch):
     cfg.bark.content = "minimal"
     assert run(bark_mod.Bark(cfg.bark).push("需要处理｜请补交 CV", "王老师：请在周五前提交", level="active"))
     assert seen[0]["title"] == "MailOwl" and "CV" not in json.dumps(seen[0], ensure_ascii=False)
+
+
+def test_card_for_deleted_record_is_marked_stale(cfg, db):
+    cfg.llm.research_backend = "claude_cli"
+    bind_owner(db)
+    svc, bot = make_service(cfg, db)
+    MailTools(cfg, db, "chat:main").request_research("查一下")
+    db.x("DELETE FROM research_requests")
+    for v in ({"a": "research_no", "r": 1}, {"a": "cancel", "d": 99}, {"a": "todo_done", "t": 7}, {"a": "view", "m": 42}):
+        bot.sent.clear()
+        run(svc.on_card_action(action(v)))
+        assert [s["kind"] for s in bot.sent] == ["update"]
+        assert "已失效" in json.dumps(bot.sent[0]["card"], ensure_ascii=False)
