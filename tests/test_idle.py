@@ -38,7 +38,8 @@ def fake_server(sock, *, idle=True, push_after=0.1, exists=True):
             elif cmd == b"LOGIN":
                 sock.sendall(tag + b" OK logged in\r\n")
             elif cmd in (b"EXAMINE", b"SELECT"):
-                sock.sendall(b"* 1 EXISTS\r\n* OK [UIDVALIDITY 7]\r\n" + tag + b" OK [READ-ONLY] done\r\n")
+                mode = b"READ-ONLY" if cmd == b"EXAMINE" else b"READ-WRITE"
+                sock.sendall(b"* 1 EXISTS\r\n* OK [UIDVALIDITY 7]\r\n" + tag + b" OK [" + mode + b"] done\r\n")
             elif cmd == b"IDLE":
                 sock.sendall(b"+ idling\r\n")
                 time.sleep(push_after)
