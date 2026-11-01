@@ -147,17 +147,20 @@ def test_level2_without_tasks_gets_no_auto_todo(cfg, db):
     assert db.q1("SELECT COUNT(*) n FROM todos")["n"] == 0
 
 
-def test_level1_goes_to_digest(cfg, db):
+def test_level1_goes_to_digest(cfg, db, caplog):
     bind_owner(db)
     svc, bot = make_service(cfg, db)
     a = add_mail(db, "1", subject="组会通知")
     run(svc.process_mail(a))
     assert db.mail(a)["route"] == "digest" and not bot.sent
+    caplog.set_level("INFO", logger="mailowl.service")
     run(svc.send_digest(title="摘要"))
     assert bot.sent[-1]["kind"] == "card" and db.mail(a)["digested_at"]
+    assert "已发送摘要：1 封" in caplog.text
     n = len(bot.sent)
     run(svc.send_digest(title="摘要"))
     assert len(bot.sent) == n, "没有新邮件时定时摘要不发"
+    assert "没有新的待摘要邮件，跳过" in caplog.text
 
 
 # ---------------------------------------------------------------- 发信：只发一次

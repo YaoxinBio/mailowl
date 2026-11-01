@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Digests are now logged: sent (with counts and the message id), skipped because nothing is new, or not sent because no chat user is paired.
+
 ## 0.1.0 — 2026-11-01
 
 First public version.

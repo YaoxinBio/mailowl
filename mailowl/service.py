@@ -354,12 +354,14 @@ class Service:
 
     async def send_digest(self, *, title: str = "邮件摘要", manual: bool = False, reply_to: str | None = None) -> None:
         if not self.owner_target():
+            log.warning("%s未发送：尚未绑定飞书用户", title)
             return
         rows = self.db.q("SELECT * FROM mails WHERE route='digest' AND digested_at IS NULL AND status!='history' "
                          "AND triaged_at IS NOT NULL ORDER BY level DESC, date_ts DESC")
         pending = self.db.q("SELECT * FROM mails WHERE status='open' AND level>=2 ORDER BY date_ts DESC LIMIT 10")
         todos = self.db.q("SELECT * FROM todos WHERE status='open' ORDER BY COALESCE(due_ts, 9e18) LIMIT 8")
         if not rows and not manual:
+            log.info("%s：没有新的待摘要邮件，跳过", title)
             return
 
         def line(r) -> str:
@@ -376,8 +378,11 @@ class Service:
             extra.append(f"☐ {t['title']}" + (f"（{fmt_ts(self.cfg, t['due_ts'])}）" if t["due_ts"] else ""))
         if not rows and not extra:
             await self.to_owner_md("暂时没有新的待摘要邮件。", reply_to=reply_to)
+            log.info("%s：没有内容，已回复「暂时没有」", title)
             return
-        await self.to_owner_card(cards.digest_card(title, groups, extra), kind="digest", reply_to=reply_to)
+        mid = await self.to_owner_card(cards.digest_card(title, groups, extra), kind="digest", reply_to=reply_to)
+        log.info("已发送%s：%d 封（待阅读 %d、通知 %d），仍待处理 %d 封，待办 %d 条，飞书消息 %s",
+                 title, len(rows), len(groups[0][1]), len(groups[1][1]), len(pending), len(todos), mid)
         ts = now()
         with self.db.tx() as c:
             c.executemany("UPDATE mails SET digested_at=? WHERE id=?", [(ts, r["id"]) for r in rows])
