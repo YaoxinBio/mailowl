@@ -54,6 +54,17 @@ MailOwl takes a different approach:
 | **2 · Needs action** | A reply or document is expected | Instant chat card + phone alert; todo created automatically |
 | **3 · Urgent** | Deadline within 48 hours | Instant chat card + time-sensitive phone alert; rings again after 20 min if unhandled |
 
+## In your chat app
+
+| A new mail, triaged | A draft with one-tap signatures | Web research needs your approval |
+|:---:|:---:|:---:|
+| <img src="assets/screenshots/mail-card.png" width="260" alt="Mail card"> | <img src="assets/screenshots/draft-card.png" width="260" alt="Draft card"> | <img src="assets/screenshots/research-card.png" width="260" alt="Research approval card"> |
+
+<p align="center">
+  <img src="assets/screenshots/bark.png" width="420" alt="Bark alert on the lock screen"><br>
+  <sub>Important mail also reaches your lock screen via Bark. Fictional mail; the chat UI is currently in Chinese.</sub>
+</p>
+
 ## Features
 
 - **Any IMAP/POP3 mailbox** — Connect any mailbox that supports IMAP or POP3 with an app password, and manage multiple accounts side by side.

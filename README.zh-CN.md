@@ -54,6 +54,17 @@ MailOwl 选择了另一条路：
 | **2 · 需要处理** | 需要你回复、拍板或提交材料 | 即时推送聊天卡片 + 手机提醒，自动创建待办 |
 | **3 · 紧急** | 48 小时内截止的事项 | 即时卡片 + 时效性手机强提醒，20 分钟未处理再次响铃 |
 
+## 在聊天软件里的样子
+
+| 新邮件分级卡片 | 草稿卡片，落款一键切换 | 上网查资料要你批准 |
+|:---:|:---:|:---:|
+| <img src="assets/screenshots/mail-card.png" width="260" alt="邮件卡片"> | <img src="assets/screenshots/draft-card.png" width="260" alt="草稿卡片"> | <img src="assets/screenshots/research-card.png" width="260" alt="上网审批卡片"> |
+
+<p align="center">
+  <img src="assets/screenshots/bark.png" width="420" alt="锁屏上的 Bark 提醒"><br>
+  <sub>重要邮件同时通过 Bark 推到锁屏。截图中的邮件均为虚构。</sub>
+</p>
+
 ## 功能
 
 - **通吃主流协议邮箱** — 只要支持 IMAP 或 POP3 且能用授权码登录即可接入，多个邮箱统一托管。
