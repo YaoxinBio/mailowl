@@ -21,11 +21,11 @@ python3 -m venv .venv && .venv/bin/pip install -e .     # 或者用 uv
 
 | 邮箱 | 收信 | 发信 | 已发送文件夹 | 备注 |
 |---|---|---|---|---|
-| Gmail | imap.gmail.com:993 | smtp.gmail.com:465 | `[Gmail]/Sent Mail` | 先开两步验证，再到 Google 账号「应用专用密码」生成；Gmail 会自动保存已发送，`save_to_sent=false` |
+| Gmail | imap.gmail.com:993 | smtp.gmail.com:465 | `[Gmail]/Sent Mail`（中文界面是 `[Gmail]/已发邮件`） | 先开两步验证，再到 Google 账号「应用专用密码」生成；Gmail 会自动保存已发送，`save_to_sent=false` |
 | QQ 邮箱 | imap.qq.com:993 | smtp.qq.com:465 | `Sent Messages` | 设置 → 账号 → 开启 IMAP/SMTP → 生成授权码 |
 | 腾讯企业邮 | imap.exmail.qq.com:993 | smtp.exmail.qq.com:465 | `Sent Messages` | 需管理员允许客户端登录 |
 | 163 / 126 | imap.163.com:993 | smtp.163.com:465 | `已发送` | 设置里开启 IMAP 并生成授权码；**必须 `imap_id = true`** |
-| 学校 Coremail | 一般是 imap.学校域名:993 | smtp.学校域名:465 | `Sent Items` 或 `已发送` | 有的学校要先在网页版「客户端设置」里开启 |
+| 其他邮箱（单位、学校、自建等） | 见邮箱网页版的「客户端设置 / IMAP」说明 | 同左 | 用 `mailowl folders` 查 | 有的要先在网页版开启客户端登录；不少邮箱 SMTP 发出的信不会自动存进已发送，这时设 `save_to_sent = true` |
 | Outlook / Hotmail | — | — | — | 微软已停用密码登录 IMAP，只能 OAuth，第一版不支持 |
 
 不确定文件夹名：先只配 `folders = ["INBOX"]`、`sent_folder = ""`，运行 `mailowl folders` 列出所有文件夹（已解码中文，标出「已发送」），再填回去。
