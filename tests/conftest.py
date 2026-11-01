@@ -7,6 +7,12 @@ from mailowl.config import load_config
 from mailowl.db import DB
 
 
+@pytest.fixture(autouse=True)
+def _no_retry_delay(monkeypatch):
+    from mailowl import triage
+    monkeypatch.setattr(triage, "TRIAGE_RETRY_DELAY", 0)
+
+
 @pytest.fixture
 def cfg(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("MAILOWL_CONFIG", raising=False)

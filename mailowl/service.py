@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import datetime as dt
 import json
 import logging
 import re
 import secrets
+import threading
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -19,6 +21,7 @@ from .bark import Bark, BarkItem, combine, in_quiet_hours
 from .config import Account, Config, lang_directive
 from .db import DB, now
 from .fetch import sync_account
+from .idle import IdleUnsupported, idle_once
 from .llm import LLMError, SessionMissing
 from .router import bark_level, route_for
 from .smtp_send import SendRejected, SendUncertain, append_to_sent, build_message, send_message
@@ -26,6 +29,8 @@ from .tools import MailTools, fmt_ts, parse_local_time
 from .triage import LEVEL_NAMES, triage_mail
 
 log = logging.getLogger(__name__)
+
+IDLE_SECONDS = 25 * 60  # RFC 2177：IDLE 不超过 29 分钟就要重发
 
 AGENT_SYSTEM = """你是用户的私人邮件助理，通过飞书和用户对话。用户在手机上阅读，回答要简洁、直接。
 你可以用 mail 工具查询用户的本地邮件库（含历史邮件和用户发出的邮件）、保存回复草稿、创建待办、标记邮件状态、记录发件人偏好。你不能直接上网。
@@ -71,7 +76,9 @@ class Service:
         self.locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self.tz = ZoneInfo(cfg.timezone)
         self.tasks: list[asyncio.Task] = []
-        self.poll_now = asyncio.Event()
+        self.wake: dict[str, asyncio.Event] = defaultdict(asyncio.Event)   # 立即收信：IDLE 通知或 /check
+        self.idle_stop = threading.Event()
+        self.idle_pool: concurrent.futures.ThreadPoolExecutor | None = None
         self._bg: set[asyncio.Task] = set()
         bot.on("message", self.on_message)
         bot.on("cardAction", self.on_card_action)
@@ -141,14 +148,21 @@ class Service:
         self.tasks = [asyncio.create_task(self.poll_loop(a), name=f"poll:{a.name}") for a in accts]
         self.tasks += [asyncio.create_task(self.triage_worker(i), name=f"triage:{i}")
                        for i in range(max(1, self.cfg.llm.triage_concurrency))]
+        idlers = [a for a in accts if a.protocol == "imap" and a.idle]
+        if idlers:
+            self.idle_pool = concurrent.futures.ThreadPoolExecutor(max_workers=len(idlers), thread_name_prefix="idle")
+            self.tasks += [asyncio.create_task(self.idle_loop(a), name=f"idle:{a.name}") for a in idlers]
         self.tasks += [asyncio.create_task(self.bark_loop(), name="bark"),
                        asyncio.create_task(self.scheduler_loop(), name="scheduler")]
         log.info("MailOwl 已启动：%d 个邮箱", len(accts))
         try:
             await asyncio.gather(*self.tasks)
         finally:
+            self.idle_stop.set()
             for t in self.tasks:
                 t.cancel()
+            if self.idle_pool is not None:
+                self.idle_pool.shutdown(wait=False, cancel_futures=True)
             await self.bot.stop()
 
     def recover(self) -> None:
@@ -198,10 +212,30 @@ class Service:
                     self.db.kv_set(f"poll_alerted:{acct.name}", "1")
                     await self.to_owner_md(f"⚠️ 邮箱 **{acct.title}** 已连续 1 小时收信失败：{e}")
             try:
-                await asyncio.wait_for(self.poll_now.wait(), timeout=backoff or acct.poll_seconds)
+                await asyncio.wait_for(self.wake[acct.name].wait(), timeout=backoff or acct.poll_seconds)
             except asyncio.TimeoutError:
                 pass
-            self.poll_now.clear()
+            self.wake[acct.name].clear()
+
+    async def idle_loop(self, acct: Account) -> None:
+        """IMAP IDLE：服务器一通知有新邮件就叫醒 poll_loop 立即收信；出错退回定时轮询，稍后重连。"""
+        loop = asyncio.get_running_loop()
+        backoff = 0
+        while not self.idle_stop.is_set():
+            try:
+                got = await loop.run_in_executor(self.idle_pool, idle_once, acct, IDLE_SECONDS, self.idle_stop)
+                backoff = 0
+                if got:
+                    log.info("%s IDLE：服务器通知有新邮件", acct.name)
+                    self.wake[acct.name].set()
+                    await asyncio.sleep(2)                  # 让同一批到达的邮件一起收
+            except IdleUnsupported as e:
+                log.info("%s 不支持 IMAP IDLE，只用定时轮询：%s", acct.name, e)
+                return
+            except Exception as e:
+                backoff = min(backoff * 2 or 30, 600)
+                log.info("%s IDLE 中断（%ds 后重连，期间照常轮询）：%s", acct.name, backoff, e)
+                await asyncio.sleep(backoff)
 
     async def poll_once(self, acct: Account) -> int:
         ids = await asyncio.to_thread(self.fetch_fn, acct, self.db, self.cfg.max_message_bytes)
@@ -229,6 +263,8 @@ class Service:
         result = await triage_mail(self.cfg, self.db, self.llm, mail_id)
         level = result["level"]
         route = route_for(self.cfg, level)
+        if self.db.mail(mail_id)["triage_error"] and level > 0:   # 模型失败时宁可多打扰一次，也不让它沉到摘要里
+            route = "immediate"
         self.db.update_mail(mail_id, route=route)
         items = [i.strip() for i in result.get("action_items") or [] if i and i.strip()]
         if level >= 3 or (level == 2 and (items or result.get("deadline") or result.get("needs_reply"))):
@@ -432,7 +468,8 @@ class Service:
             await self.to_owner_card(cards.status_card("运行状态", self.status_lines()), kind="status", reply_to=message_id)
             return
         if cmd == "/check":
-            self.poll_now.set()
+            for a in self.cfg.accounts:
+                self.wake[a.name].set()
             await self.to_owner_md("已触发收信。", reply_to=message_id)
             return
         if cmd == "/new":

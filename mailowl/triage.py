@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -126,13 +127,15 @@ def local_result(cfg: Config, db: DB, m) -> dict[str, Any]:
     return apply_rules(cfg, db, m, base)
 
 
+TRIAGE_RETRY_DELAY = 10  # 秒；测试里设为 0
+
 LOCAL_TEXT = {   # 不经模型时写给用户的说明（tag, analysis）
     "zh": {"self": ("自己发的", "发件人是你自己的邮箱，不调用模型、不提醒。"),
            "local": ("本地处理", "命中本地处理规则：内容未发送给模型。"),
-           "failed": ("未经模型分析", "模型分级失败，按规则兜底。")},
+           "failed": ("未经模型分析", "模型这次没能分析这封邮件，已直接推给你，请自己看一下。")},
     "en": {"self": ("from yourself", "Sent from one of your own mailboxes; not sent to the model, no alert."),
            "local": ("local only", "Matched a local-only rule; the content was not sent to the model."),
-           "failed": ("not analyzed", "Model triage failed; classified by rules.")},
+           "failed": ("not analyzed", "The model couldn't analyze this message, so it was sent to you right away — please take a look.")},
 }
 
 
@@ -151,14 +154,22 @@ async def triage_mail(cfg: Config, db: DB, llm, mail_id: int) -> dict[str, Any]:
         result["analysis"] = text["local"][1]
         result["tags"] = [text["local"][0]]
     else:
-        try:
-            raw, cost = await llm.structured(build_prompt(cfg, db, m), SCHEMA, system=f"{SYSTEM}\n{lang_directive(cfg)}")
-            log.info("triage #%s level=%s cost=$%.4f", mail_id, raw.get("level"), cost)
-            db.log_action("llm_cost", mail_id, {"usd": cost, "kind": "triage"})
-            result = apply_rules(cfg, db, m, raw)
-        except Exception as e:
-            log.warning("triage #%s 模型调用失败，按规则兜底: %s", mail_id, e)
-            error = str(e)[:500]
+        for attempt in range(2):                       # 模型偶发失败（网络抖动、限流）先重试一次
+            try:
+                raw, cost = await llm.structured(build_prompt(cfg, db, m), SCHEMA,
+                                                 system=f"{SYSTEM}\n{lang_directive(cfg)}")
+                log.info("triage #%s level=%s cost=$%.4f", mail_id, raw.get("level"), cost)
+                db.log_action("llm_cost", mail_id, {"usd": cost, "kind": "triage"})
+                result = apply_rules(cfg, db, m, raw)
+                error = None
+                break
+            except Exception as e:
+                error = str(e)[:500]
+                if attempt == 0:
+                    log.warning("triage #%s 模型调用失败，%ss 后重试: %s", mail_id, TRIAGE_RETRY_DELAY, e)
+                    await asyncio.sleep(TRIAGE_RETRY_DELAY)
+        if error is not None:
+            log.warning("triage #%s 模型调用两次失败，按规则兜底并直接推送: %s", mail_id, error)
             result = local_result(cfg, db, m)
             result["analysis"] = text["failed"][1]
             result["tags"] = [text["failed"][0]]
