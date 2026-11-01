@@ -72,12 +72,11 @@ MailOwl 默认把所有外来邮件视为不可信输入，用代码边界而非
 ## 快速开始
 
 ```bash
-git clone https://github.com/YaoxinBio/mailowl.git && cd mailowl
-python3 -m venv .venv && .venv/bin/pip install -e .
-.venv/bin/mailowl init     # 在 ~/.config/mailowl/ 生成配置模板
-.venv/bin/mailowl check    # 检查邮箱、模型、聊天机器人、Bark
-.venv/bin/mailowl fetch    # 首次收信：最近 30 天存为历史，不推送
-bash deploy/install-launchd.sh
+uv tool install git+https://github.com/YaoxinBio/mailowl   # 或者：pipx install git+https://github.com/YaoxinBio/mailowl
+mailowl init              # 在 ~/.config/mailowl/ 生成配置模板
+mailowl check             # 检查邮箱、模型、聊天机器人、Bark
+mailowl fetch             # 首次收信：最近 30 天存为历史，不推送
+mailowl service install   # 装成后台服务（登录后自动启动，崩溃自动拉起）
 ```
 
 完整配置步骤（邮箱授权码、飞书机器人、Bark 推送）：**[docs/SETUP.md](docs/SETUP.md)**。
@@ -103,7 +102,7 @@ bash deploy/install-launchd.sh
 
 - OpenAI 兼容后端目前仅跑过模拟测试（Mock Tests）；基于 Tavily 的网页搜索尚未真机验证。
 - 目前仅支持 macOS（依赖 `launchd`），暂未提供 Linux / Docker 部署方案。
-- 邮箱需支持授权码登录：暂不支持仅允许 OAuth 的 Outlook / Hotmail；Gmail 需配合应用专用密码使用，暂不支持 OAuth。
+- 邮箱需支持授权码登录：仅允许 OAuth 的 Outlook / Hotmail 暂不能直接接入，可以先自动转发到支持的邮箱（见安装文档）；Gmail 需配合应用专用密码使用，暂不支持 OAuth。
 - 聊天端目前仅支持飞书，Lark 国际版尚未测试。
 - 界面文案与内置提示词目前均为中文。
 

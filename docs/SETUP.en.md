@@ -9,10 +9,8 @@ MailOwl runs on an always-on Mac (called "the host" below, e.g. a Mac mini at ho
 Requires Python 3.11+. By default MailOwl calls models through the [Claude Code](https://claude.com/claude-code) CLI that is already logged in on the host; any OpenAI-compatible API works too (see section 5).
 
 ```bash
-git clone https://github.com/YaoxinBio/mailowl.git
-cd mailowl
-python3 -m venv .venv && .venv/bin/pip install -e .     # or use uv
-.venv/bin/mailowl init                                   # writes config templates to ~/.config/mailowl/
+uv tool install git+https://github.com/YaoxinBio/mailowl   # or pipx install …; to hack on it, git clone and pip install -e .
+mailowl init                                               # writes config templates to ~/.config/mailowl/
 ```
 
 Do the next four steps in order: **Feishu only lets you save the long-connection setting while the service is online**, so fill in the credentials and start the service before going back to the console.
@@ -28,7 +26,9 @@ Mail is fetched over IMAP (recommended — MailOwl reads your Sent folder to tel
 | Tencent Exmail | imap.exmail.qq.com:993 | smtp.exmail.qq.com:465 | `Sent Messages` | The admin must allow client login |
 | 163 / 126 | imap.163.com:993 | smtp.163.com:465 | `已发送` | Enable IMAP and generate an authorization code; **requires `imap_id = true`** |
 | Other (work, university, self-hosted) | see the provider's IMAP/client settings page | same | find it with `mailowl folders` | Some require enabling client login in webmail first; many do not save SMTP-sent mail, set `save_to_sent = true` |
-| Outlook / Hotmail | — | — | — | Microsoft only allows OAuth for IMAP; not supported yet |
+| Outlook / Hotmail / Microsoft 365 | — | — | — | Microsoft only allows OAuth for IMAP; not supported yet — see the workaround below |
+
+**Mailbox without app passwords** (e.g. a university or company Microsoft 365 account): in its webmail, set up automatic forwarding of a copy to a supported mailbox (Gmail, QQ, 163 …) and connect that one to MailOwl. Trade-off: replies are sent from the forwarding target, and MailOwl cannot see what you sent from the original mailbox.
 
 Not sure about folder names? Start with `folders = ["INBOX"]` and `sent_folder = ""`, run `mailowl folders` (names are decoded, the Sent folder is marked), then fill them in.
 
@@ -62,14 +62,13 @@ After changing permissions, publish a new version for them to take effect.
 ## 4. Run and operate (on the host)
 
 ```bash
-cd mailowl                              # project directory
 nano ~/.config/mailowl/config.toml      # mailboxes, profile, rules, signatures
 nano ~/.config/mailowl/secrets.toml     # app passwords, Feishu credentials, Bark key
-.venv/bin/mailowl check                 # checks every login
-.venv/bin/mailowl fetch                 # first fetch: last 30 days stored as history (max 500 per folder), no alerts
-.venv/bin/mailowl pair                  # pairing code
-bash deploy/install-launchd.sh          # install as a LaunchAgent (starts at login, restarts on crash)
-tail -f ~/.local/share/mailowl/logs/mailowl.log
+mailowl check                           # checks every login
+mailowl fetch                           # first fetch: last 30 days stored as history (max 500 per folder), no alerts
+mailowl pair                            # pairing code
+mailowl service install                 # run as a LaunchAgent (starts at login, restarts on crash)
+mailowl service status                  # likewise: restart / logs / uninstall
 ```
 
 If you develop on another machine, `deploy/deploy.sh --restart [host]` rsyncs the code, installs dependencies, runs the tests and restarts the service.

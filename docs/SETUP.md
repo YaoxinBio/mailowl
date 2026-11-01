@@ -9,10 +9,8 @@ MailOwl 跑在一台常开的 Mac 上（下文叫「运行机」，比如家里�
 需要 Python 3.11+；默认用运行机上已登录的 [Claude Code](https://claude.com/claude-code) 调模型（也可以换成其他模型，见第 5 节）。
 
 ```bash
-git clone https://github.com/YaoxinBio/mailowl.git
-cd mailowl
-python3 -m venv .venv && .venv/bin/pip install -e .     # 或者用 uv
-.venv/bin/mailowl init                                   # 生成 ~/.config/mailowl/ 下的配置模板
+uv tool install git+https://github.com/YaoxinBio/mailowl   # 或者 pipx install …；想改代码就 git clone 后 pip install -e .
+mailowl init                                               # 生成 ~/.config/mailowl/ 下的配置模板
 ```
 
 下面四步做完就能用，顺序别乱：**飞书长连接要求保存配置时服务已经在线**，所以要先填凭证、启动服务，再回控制台保存长连接设置。
@@ -28,7 +26,9 @@ python3 -m venv .venv && .venv/bin/pip install -e .     # 或者用 uv
 | 腾讯企业邮 | imap.exmail.qq.com:993 | smtp.exmail.qq.com:465 | `Sent Messages` | 需管理员允许客户端登录 |
 | 163 / 126 | imap.163.com:993 | smtp.163.com:465 | `已发送` | 设置里开启 IMAP 并生成授权码；**必须 `imap_id = true`** |
 | 其他邮箱（单位、学校、自建等） | 见邮箱网页版的「客户端设置 / IMAP」说明 | 同左 | 用 `mailowl folders` 查 | 有的要先在网页版开启客户端登录；不少邮箱 SMTP 发出的信不会自动存进已发送，这时设 `save_to_sent = true` |
-| Outlook / Hotmail | — | — | — | 微软已停用密码登录 IMAP，只能 OAuth，第一版不支持 |
+| Outlook / Hotmail / 微软 365 | — | — | — | 微软只允许 OAuth 登录 IMAP，暂不支持；见下方「绕过办法」 |
+
+**邮箱不支持授权码怎么办**（比如用微软 365 的学校、公司邮箱）：在那个邮箱的网页版里设置「自动转发副本」到一个支持的邮箱（Gmail、QQ、163 等），然后用 MailOwl 接入转发到的那个邮箱。代价是：回复会从转发到的邮箱发出，MailOwl 也看不到你在原邮箱里发过什么。
 
 不确定文件夹名：先只配 `folders = ["INBOX"]`、`sent_folder = ""`，运行 `mailowl folders` 列出所有文件夹（已解码中文，标出「已发送」），再填回去。
 
@@ -62,14 +62,13 @@ python3 -m venv .venv && .venv/bin/pip install -e .     # 或者用 uv
 ## 4. 启动与日常运维（都在运行机上）
 
 ```bash
-cd mailowl            # 项目目录
-nano ~/.config/mailowl/config.toml      # 邮箱、profile、规则
+nano ~/.config/mailowl/config.toml      # 邮箱、profile、规则、落款模板
 nano ~/.config/mailowl/secrets.toml     # 授权码、飞书凭证、Bark key
-.venv/bin/mailowl check                 # 逐项检查登录
-.venv/bin/mailowl fetch                 # 首次收信：回填最近 30 天作为历史（每个文件夹最多 500 封），不推送
-.venv/bin/mailowl pair                  # 显示配对码
-bash deploy/install-launchd.sh            # 安装为后台服务（开机/崩溃自动拉起）
-tail -f ~/.local/share/mailowl/logs/mailowl.log
+mailowl check                           # 逐项检查登录
+mailowl fetch                           # 首次收信：回填最近 30 天作为历史（每个文件夹最多 500 封），不推送
+mailowl pair                            # 显示配对码
+mailowl service install                 # 装成后台服务（登录后自动启动，崩溃自动拉起）
+mailowl service status                  # 运行状态；restart / logs / uninstall 同理
 ```
 
 在另一台电脑上开发、运行机上跑的话，可以用 `deploy/deploy.sh --restart [主机名]`：rsync 同步 → 装依赖 → 跑测试 → 重启服务。

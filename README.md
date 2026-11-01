@@ -72,12 +72,11 @@ MailOwl treats incoming email as untrusted input and enforces boundaries in code
 ## Quick Start
 
 ```bash
-git clone https://github.com/YaoxinBio/mailowl.git && cd mailowl
-python3 -m venv .venv && .venv/bin/pip install -e .
-.venv/bin/mailowl init     # config templates in ~/.config/mailowl/
-.venv/bin/mailowl check    # verify mailboxes, model, chat bot, Bark
-.venv/bin/mailowl fetch    # first fetch: last 30 days stored as history, no alerts
-bash deploy/install-launchd.sh
+uv tool install git+https://github.com/YaoxinBio/mailowl   # or: pipx install git+https://github.com/YaoxinBio/mailowl
+mailowl init              # config templates in ~/.config/mailowl/
+mailowl check             # verify mailboxes, model, chat bot, Bark
+mailowl fetch             # first fetch: last 30 days stored as history, no alerts
+mailowl service install   # run in the background (starts at login, restarts on crash)
 ```
 
 For step-by-step configuration (mailbox app passwords, Feishu/Lark bot setup, and Bark push alerts), see **[docs/SETUP.en.md](docs/SETUP.en.md)**.
@@ -103,7 +102,7 @@ MailOwl is in an early stage. The core workflow is **verified end-to-end on real
 
 - The OpenAI-compatible backend is currently covered by mocked tests only; web search via Tavily is unverified.
 - macOS only (`launchd`); no Linux or Docker packaging yet.
-- Mailboxes must support app-password login: Outlook/Hotmail (OAuth-only) are not supported; Gmail works via app password, with no OAuth support yet.
+- Mailboxes must support app-password login: Outlook/Hotmail (OAuth-only) are not supported directly — auto-forward them to a supported mailbox as a workaround (see the setup guide). Gmail works via app password, with no OAuth support yet.
 - The chat interface is Feishu/Lark only, and Lark (international) has not been tested.
 - UI text and built-in prompts are currently in Chinese.
 

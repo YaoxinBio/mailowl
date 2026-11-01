@@ -17,6 +17,9 @@ test = ["pytest>=7"]
 [project.scripts]
 mailowl = "mailowl.cli:main"
 
+[tool.setuptools.package-data]
+mailowl = ["templates/*.toml"]
+
 [project.urls]
 Homepage = "https://github.com/YaoxinBio/mailowl"
 

@@ -7,14 +7,12 @@ import json
 import logging
 import logging.handlers
 import os
-import shutil
 import sys
 from pathlib import Path
 
 from .config import Config, ConfigError, ensure_dirs, load_config, resolve_config_path
 
 log = logging.getLogger("mailowl")
-ROOT = Path(__file__).resolve().parent.parent
 
 
 def setup_logging(cfg: Config | None, verbose: bool = False) -> None:
@@ -49,7 +47,7 @@ def cmd_init(args) -> int:
         if dst.exists():
             print(f"已存在，跳过：{dst}")
             continue
-        shutil.copy(ROOT / src, dst)
+        dst.write_bytes((Path(__file__).parent / "templates" / src).read_bytes())
         if name == "secrets.toml":
             os.chmod(dst, 0o600)
         print(f"已创建：{dst}")
@@ -286,6 +284,40 @@ def cmd_bark_test(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_service(args) -> int:
+    """安装 / 卸载 / 查看 / 重启后台服务（macOS LaunchAgent）。"""
+    from . import launchd
+    if sys.platform != "darwin":
+        print("后台服务目前只支持 macOS（launchd）。其他系统可以用 `mailowl run` 配合 systemd 等自行托管。")
+        return 2
+    if args.action == "uninstall":
+        launchd.uninstall()
+        print("已卸载后台服务")
+        return 0
+    cfg = _cfg(args)
+    if args.action == "install":
+        if not args.no_check and cmd_check(args) != 0:
+            print("\n检查没有全部通过，先修好配置再安装服务（确实要装可以加 --no-check）")
+            return 1
+        info = launchd.install(cfg)
+    elif args.action == "restart":
+        info = launchd.restart()
+    elif args.action == "logs":
+        log_file = cfg.log_dir / "mailowl.log"
+        lines = log_file.read_text("utf-8", "replace").splitlines()[-args.lines:] if log_file.exists() else []
+        print("\n".join(lines) or f"还没有日志：{log_file}")
+        return 0
+    else:
+        info = launchd.status()
+    if not info.get("loaded"):
+        print("后台服务未运行" + ("（已安装但没有加载）" if info.get("plist") else "（未安装，运行 mailowl service install）"))
+        return 1 if args.action != "status" else 0
+    print(f"后台服务：{info.get('state', '?')}" + (f"，pid {info['pid']}" if info.get("pid") else "")
+          + (f"，上次退出码 {info['last_exit']}" if info.get("last_exit") else ""))
+    print(f"日志：{cfg.log_dir / 'mailowl.log'}")
+    return 0
+
+
 def cmd_cards(args) -> int:
     """导出示例卡片 JSON，可粘贴到飞书「卡片搭建工具」里预览。"""
     from . import cards
@@ -341,6 +373,10 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--level", default="timeSensitive")
     c = sub.add_parser("cards", help="导出示例卡片 JSON")
     c.add_argument("--out", default="tmp/cards")
+    sv = sub.add_parser("service", help="后台服务：install / uninstall / status / restart / logs")
+    sv.add_argument("action", choices=["install", "uninstall", "status", "restart", "logs"])
+    sv.add_argument("--no-check", action="store_true", help="install 时跳过 mailowl check")
+    sv.add_argument("-n", "--lines", type=int, default=40, help="logs 显示的行数")
     sub.add_parser("mcp", help="（供 claude 调用）运行 MCP 邮件工具服务器")
     args = p.parse_args(argv)
     if args.cmd == "mcp":
@@ -353,7 +389,7 @@ def main(argv: list[str] | None = None) -> int:
         logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
     handlers = {"init": cmd_init, "check": cmd_check, "run": cmd_run, "pair": cmd_pair, "fetch": cmd_fetch,
                 "triage": cmd_triage, "agent": cmd_agent, "bark-test": cmd_bark_test, "cards": cmd_cards,
-                "folders": cmd_folders}
+                "folders": cmd_folders, "service": cmd_service}
     try:
         return handlers[args.cmd](args)
     except ConfigError as e:
