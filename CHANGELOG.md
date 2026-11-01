@@ -1,15 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- `mailowl demo`: zero-config demo with fictional mail (triage, drafting from history, prompt-injection email).
-- `mailowl service install|uninstall|status|restart|logs`; works with `uv tool install` / `pipx`.
-- Config templates ship inside the package, so `mailowl init` works from any install.
-- OpenAI-compatible backend verified with a local Ollama model; local/LAN model URLs bypass proxies; SOCKS proxies supported.
-- Docs: forwarding workaround for mailboxes without app passwords.
-- `language = "en" | "zh"` for summaries, analysis and answers; `mailowl demo --lang en|zh` with everyday, non-domain-specific examples.
-- Privacy mode: `[llm.triage]` routes triage to a separate (e.g. local) model; `[bark] content = "minimal"` keeps mail content out of push notifications.
-
 ## 0.1.0 — 2026-11-01
 
 First public version.
@@ -21,3 +11,10 @@ First public version.
 - Bark alerts for important and urgent mail, quiet hours, escalation.
 - Isolated research agent: web lookups only after approval, with no mailbox access.
 - Model backends: Claude Code CLI, or any OpenAI-compatible API.
+- `mailowl demo`: zero-config demo with fictional mail (triage, drafting from history, prompt-injection email).
+- `mailowl service install|uninstall|status|restart|logs`; works with `uv tool install` / `pipx`.
+- Config templates ship inside the package, so `mailowl init` works from any install.
+- OpenAI-compatible backend verified with a local Ollama model; local/LAN model URLs bypass proxies; SOCKS proxies supported.
+- Docs: forwarding workaround for mailboxes without app passwords.
+- `language = "en" | "zh"` for summaries, analysis and answers; `mailowl demo --lang en|zh` with everyday, non-domain-specific examples.
+- Privacy mode: `[llm.triage]` routes triage to a separate (e.g. local) model; `[bark] content = "minimal"` keeps mail content out of push notifications.
