@@ -17,4 +17,6 @@ First public version.
 - OpenAI-compatible backend verified with a local Ollama model; local/LAN model URLs bypass proxies; SOCKS proxies supported.
 - Docs: forwarding workaround for mailboxes without app passwords.
 - `language = "en" | "zh"` for summaries, analysis and answers; `mailowl demo --lang en|zh` with everyday, non-domain-specific examples.
+- New mail is noticed within ~20 s (a STATUS check every 20 s on a kept-open connection; IMAP IDLE was tried and dropped because QQ Mail does not push reliably and Coremail lacks it); a failed triage retries once and then pushes the mail immediately.
+- Cards whose mail, draft, todo or research request no longer exists are marked stale instead of erroring.
 - Privacy mode: `[llm.triage]` routes triage to a separate (e.g. local) model; `[bark] content = "minimal"` keeps mail content out of push notifications.

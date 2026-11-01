@@ -71,6 +71,7 @@ MailOwl takes a different approach:
 - **Talk to your inbox history** — Reply to a thread card with questions like *"Did I already send them my CV?"* The agent searches your sent mail and cites the exact messages in its answer.
 - **Drafts that sound like you** — Replies automatically match the thread's language, draw on your past emails with the same recipient for context and tone, and let you switch signature templates (*casual*, *formal*, *English*) with a single tap.
 - **Automatic todos & follow-ups** — Action items with deadlines become tracked todos automatically, trigger reminders before they come due, and close themselves as soon as your reply goes out.
+- **Fast** — a lightweight check every 20 s on a kept-open connection notices new mail within about 20 seconds on most servers (QQ Mail caches for up to a minute); a full sync every 3 minutes is the safety net. If the model fails, the mail is pushed to you right away instead of waiting for the digest.
 - **Quiet by default** — Non-urgent notifications stay silent overnight, burst arrivals are coalesced into a single alert, and hourly notifications are hard-capped.
 - **Bring your own model** — Run against the local Claude Code CLI already logged in on your Mac, or point MailOwl at any OpenAI-compatible API.
 - **Zero open ports** — The chat bot connects via an outbound WebSocket, so your Mac requires no public IP, port forwarding, or reverse proxy.

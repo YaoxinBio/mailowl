@@ -45,7 +45,7 @@ class Account:
     backfill_days: int = 30           # 首次接入时回填多少天作为历史（不推送）
     backfill_max: int = 500
     imap_id: bool = False             # 163/126 等要求登录后发送 IMAP ID
-    idle: bool = True                 # IMAP IDLE：新邮件到达时服务器立即通知（不支持的服务器自动退回轮询）
+    watch: bool = True                # 保持一条连接每 20 秒查一次有无新邮件（比定时整轮收信快得多；POP3 不适用）
     smtp_host: str = ""
     smtp_port: int = 465
     smtp_security: str = "ssl"        # ssl | starttls

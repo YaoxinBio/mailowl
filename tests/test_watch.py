@@ -1,11 +1,11 @@
-"""IMAP IDLE：用一对本地 socket 模拟服务器，不联网。"""
+"""新邮件监测：用一对本地 socket 模拟 IMAP 服务器，不联网。"""
 import asyncio
 import imaplib
 import socket
 import threading
 import time
 
-from mailowl.idle import idle_once
+from mailowl.watch import watch_once
 from tests.test_service import FakeLLM, add_mail, bind_owner, make_service, run
 
 
@@ -20,9 +20,9 @@ class PairIMAP(imaplib.IMAP4):
         self.file = self.sock.makefile("rb")
 
 
-def fake_server(sock, *, idle=True, push_after=0.1, exists=True):
-    """最小 IMAP 服务器：问候、CAPABILITY、EXAMINE、IDLE。"""
-    state = {"noops": 0}
+def fake_server(sock, *, new_mail=True, bump_after=2):
+    """最小 IMAP 服务器：问候、LOGIN、STATUS（第 bump_after 次查询起 UIDNEXT +1）、LOGOUT。"""
+    state = {"status": 0}
 
     def run_server():
         f = sock.makefile("rb")
@@ -34,28 +34,21 @@ def fake_server(sock, *, idle=True, push_after=0.1, exists=True):
             tag, cmd = line.split(b" ", 2)[:2]
             cmd = cmd.strip().upper()
             if cmd == b"CAPABILITY":
-                sock.sendall(b"* CAPABILITY IMAP4rev1" + (b" IDLE" if idle else b"") + b"\r\n" + tag + b" OK done\r\n")
+                sock.sendall(b"* CAPABILITY IMAP4rev1\r\n" + tag + b" OK done\r\n")
             elif cmd == b"LOGIN":
                 sock.sendall(tag + b" OK logged in\r\n")
-            elif cmd in (b"EXAMINE", b"SELECT"):
-                mode = b"READ-ONLY" if cmd == b"EXAMINE" else b"READ-WRITE"
-                sock.sendall(b"* 1 EXISTS\r\n* OK [UIDVALIDITY 7]\r\n" + tag + b" OK [" + mode + b"] done\r\n")
-            elif cmd == b"IDLE":
-                sock.sendall(b"+ idling\r\n")
-                time.sleep(push_after)
-                if exists:
-                    sock.sendall(b"* 2 EXISTS\r\n")
-            elif cmd == b"NOOP":
-                state["noops"] += 1
-                extra = b"* 2 EXISTS\r\n" if exists and state["noops"] >= 2 else b""
-                sock.sendall(extra + tag + b" OK NOOP completed\r\n")
+            elif cmd == b"STATUS":
+                state["status"] += 1
+                nxt = 11 if new_mail and state["status"] >= bump_after else 10
+                sock.sendall(b"* STATUS INBOX (UIDNEXT %d MESSAGES 9)\r\n" % nxt + tag + b" OK done\r\n")
             elif cmd == b"LOGOUT":
                 sock.sendall(b"* BYE\r\n" + tag + b" OK bye\r\n")
                 return
+
     def safe():
         try:
             run_server()
-        except OSError:          # 客户端先断开（超时、stop）时服务器侧写失败，正常
+        except OSError:          # 客户端先断开时服务器侧写失败，正常
             pass
     threading.Thread(target=safe, daemon=True).start()
 
@@ -70,24 +63,21 @@ def connect_pair(**kw):
     return connect
 
 
-def test_idle_reports_new_mail(cfg):
-    assert idle_once(cfg.account("work"), 5, connect=connect_pair()) is True
+def test_watch_reports_new_mail(cfg, monkeypatch):
+    from mailowl import watch
+    monkeypatch.setattr(watch, "WATCH_SECONDS", 0.1)
+    assert watch_once(cfg.account("work"), 5, connect=connect_pair()) is True
 
 
-def test_idle_times_out_and_honors_stop(cfg):
+def test_watch_times_out_and_honors_stop(cfg, monkeypatch):
+    from mailowl import watch
+    monkeypatch.setattr(watch, "WATCH_SECONDS", 0.1)
     t0 = time.monotonic()
-    assert idle_once(cfg.account("work"), 0.5, connect=connect_pair(exists=False)) is False
+    assert watch_once(cfg.account("work"), 0.5, connect=connect_pair(new_mail=False)) is False
     assert time.monotonic() - t0 < 3
     stop = threading.Event()
     stop.set()
-    assert idle_once(cfg.account("work"), 60, stop, connect=connect_pair(exists=False)) is False
-
-
-def test_noop_watch_when_server_has_no_idle(cfg, monkeypatch):
-    from mailowl import idle
-    monkeypatch.setattr(idle, "NOOP_SECONDS", 0.1)
-    assert idle_once(cfg.account("work"), 5, connect=connect_pair(idle=False)) is True
-    assert idle_once(cfg.account("work"), 0.5, connect=connect_pair(idle=False, exists=False)) is False
+    assert watch_once(cfg.account("work"), 60, stop, connect=connect_pair(new_mail=False)) is False
 
 
 def test_wake_event_triggers_immediate_poll(cfg, db):
@@ -119,3 +109,9 @@ def test_failed_triage_is_pushed_immediately(cfg, db):
     m = db.mail(mid)
     assert m["level"] == 1 and m["route"] == "immediate" and m["notified_at"]
     assert [s["kind"] for s in bot.sent] == ["card"]
+
+
+def test_snapshot_falls_back_to_message_count():
+    from mailowl.watch import _has_new
+    assert _has_new((10, 5), (11, 5)) and not _has_new((10, 5), (10, 6))   # 有 UIDNEXT 就只看它
+    assert _has_new((None, 2772), (None, 2773)) and not _has_new((None, 2772), (None, 2772))

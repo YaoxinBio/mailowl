@@ -21,7 +21,7 @@ from .bark import Bark, BarkItem, combine, in_quiet_hours
 from .config import Account, Config, lang_directive
 from .db import DB, now
 from .fetch import sync_account
-from .idle import IdleUnsupported, idle_once
+from .watch import watch_once
 from .llm import LLMError, SessionMissing
 from .router import bark_level, route_for
 from .smtp_send import SendRejected, SendUncertain, append_to_sent, build_message, send_message
@@ -30,7 +30,7 @@ from .triage import LEVEL_NAMES, triage_mail
 
 log = logging.getLogger(__name__)
 
-IDLE_SECONDS = 25 * 60  # RFC 2177：IDLE 不超过 29 分钟就要重发
+WATCH_CONN_SECONDS = 25 * 60  # 盯新邮件的连接用多久重建一次
 
 AGENT_SYSTEM = """你是用户的私人邮件助理，通过飞书和用户对话。用户在手机上阅读，回答要简洁、直接。
 你可以用 mail 工具查询用户的本地邮件库（含历史邮件和用户发出的邮件）、保存回复草稿、创建待办、标记邮件状态、记录发件人偏好。你不能直接上网。
@@ -77,8 +77,8 @@ class Service:
         self.tz = ZoneInfo(cfg.timezone)
         self.tasks: list[asyncio.Task] = []
         self.wake: dict[str, asyncio.Event] = defaultdict(asyncio.Event)   # 立即收信：IDLE 通知或 /check
-        self.idle_stop = threading.Event()
-        self.idle_pool: concurrent.futures.ThreadPoolExecutor | None = None
+        self.watch_stop = threading.Event()
+        self.watch_pool: concurrent.futures.ThreadPoolExecutor | None = None
         self._bg: set[asyncio.Task] = set()
         bot.on("message", self.on_message)
         bot.on("cardAction", self.on_card_action)
@@ -148,21 +148,21 @@ class Service:
         self.tasks = [asyncio.create_task(self.poll_loop(a), name=f"poll:{a.name}") for a in accts]
         self.tasks += [asyncio.create_task(self.triage_worker(i), name=f"triage:{i}")
                        for i in range(max(1, self.cfg.llm.triage_concurrency))]
-        idlers = [a for a in accts if a.protocol == "imap" and a.idle]
-        if idlers:
-            self.idle_pool = concurrent.futures.ThreadPoolExecutor(max_workers=len(idlers), thread_name_prefix="idle")
-            self.tasks += [asyncio.create_task(self.idle_loop(a), name=f"idle:{a.name}") for a in idlers]
+        watched = [a for a in accts if a.protocol == "imap" and a.watch]
+        if watched:
+            self.watch_pool = concurrent.futures.ThreadPoolExecutor(max_workers=len(watched), thread_name_prefix="watch")
+            self.tasks += [asyncio.create_task(self.watch_loop(a), name=f"watch:{a.name}") for a in watched]
         self.tasks += [asyncio.create_task(self.bark_loop(), name="bark"),
                        asyncio.create_task(self.scheduler_loop(), name="scheduler")]
         log.info("MailOwl 已启动：%d 个邮箱", len(accts))
         try:
             await asyncio.gather(*self.tasks)
         finally:
-            self.idle_stop.set()
+            self.watch_stop.set()
             for t in self.tasks:
                 t.cancel()
-            if self.idle_pool is not None:
-                self.idle_pool.shutdown(wait=False, cancel_futures=True)
+            if self.watch_pool is not None:
+                self.watch_pool.shutdown(wait=False, cancel_futures=True)
             await self.bot.stop()
 
     def recover(self) -> None:
@@ -217,24 +217,21 @@ class Service:
                 pass
             self.wake[acct.name].clear()
 
-    async def idle_loop(self, acct: Account) -> None:
-        """IMAP IDLE：服务器一通知有新邮件就叫醒 poll_loop 立即收信；出错退回定时轮询，稍后重连。"""
+    async def watch_loop(self, acct: Account) -> None:
+        """每 20 秒查一次 INBOX 的 UIDNEXT，有新邮件就叫醒 poll_loop 立即收信；出错退回定时轮询，稍后重连。"""
         loop = asyncio.get_running_loop()
         backoff = 0
-        while not self.idle_stop.is_set():
+        while not self.watch_stop.is_set():
             try:
-                got = await loop.run_in_executor(self.idle_pool, idle_once, acct, IDLE_SECONDS, self.idle_stop)
+                got = await loop.run_in_executor(self.watch_pool, watch_once, acct, WATCH_CONN_SECONDS, self.watch_stop)
                 backoff = 0
                 if got:
-                    log.info("%s IDLE：服务器通知有新邮件", acct.name)
+                    log.info("%s 发现新邮件，立即收信", acct.name)
                     self.wake[acct.name].set()
                     await asyncio.sleep(2)                  # 让同一批到达的邮件一起收
-            except IdleUnsupported as e:
-                log.info("%s 不支持 IMAP IDLE，只用定时轮询：%s", acct.name, e)
-                return
             except Exception as e:
                 backoff = min(backoff * 2 or 30, 600)
-                log.info("%s IDLE 中断（%ds 后重连，期间照常轮询）：%s", acct.name, backoff, e)
+                log.info("%s 新邮件监测中断（%ds 后重连，期间照常轮询）：%s", acct.name, backoff, e)
                 await asyncio.sleep(backoff)
 
     async def poll_once(self, acct: Account) -> int:
