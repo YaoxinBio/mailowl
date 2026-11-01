@@ -18,6 +18,12 @@
 
 <p align="center"><a href="README.md">English</a> · <b>简体中文</b></p>
 
+
+<p align="center">
+  <img src="assets/demo.gif" alt="mailowl demo" width="760"><br>
+  <sub><code>mailowl demo</code> 的真实输出（邮件均为虚构）：分级、按过去往来起草回复、一封藏着恶意指令的邮件无从下手。</sub>
+</p>
+
 ---
 
 ## 为什么做 MailOwl

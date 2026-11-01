@@ -18,6 +18,12 @@
 
 <p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a></p>
 
+
+<p align="center">
+  <img src="assets/demo.gif" alt="mailowl demo" width="760"><br>
+  <sub><code>mailowl demo</code> — real output on fictional mail: triage, a reply drafted from past correspondence, and a prompt-injection email that gets nowhere.</sub>
+</p>
+
 ---
 
 ## Why MailOwl

@@ -185,7 +185,7 @@ async def run_demo(base_url: str | None = None, model: str | None = None, keep: 
             print(f"      {r.get('summary', '')}")
             extra = []
             if r.get("deadline"):
-                extra.append(f"⏰ {r['deadline']}")
+                extra.append(f"截止 {r['deadline']}")
             if r.get("action_items"):
                 extra.append("待办：" + "；".join(r["action_items"][:3]))
             if r.get("tags"):
@@ -238,14 +238,15 @@ def _never_send(acct, msg):  # 演示里不会走到这里；万一走到也绝�
 def _print_bot(bot: FakeBot) -> None:
     for item in bot.sent:
         if item["kind"] == "markdown":
-            print("  " + blue("MailOwl：") + item["text"].strip().replace("\n", "\n  "))
+            text = item["text"].strip().replace("**", "")          # 终端里不渲染 markdown 粗体
+            print("  " + blue("MailOwl：") + text.replace("\n", "\n  "))
         elif item["kind"] == "card":
             c = item["card"]
             title = c["header"]["title"]["content"]
             print("  " + amber(f"┌ 卡片：{title}"))
             for e in c["body"]["elements"]:
                 if e.get("tag") == "div" and e.get("text", {}).get("tag") == "plain_text":
-                    if e["text"]["content"].startswith("回复这条消息"):
+                    if e["text"]["content"].startswith("回复这条消息") or e["text"]["content"] == "落款":
                         continue
                     for line in e["text"]["content"].splitlines():
                         print("  " + amber("│ ") + line)
