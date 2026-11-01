@@ -37,7 +37,7 @@ def fake_server(sock, *, idle=True, push_after=0.1, exists=True):
                 sock.sendall(b"* CAPABILITY IMAP4rev1" + (b" IDLE" if idle else b"") + b"\r\n" + tag + b" OK done\r\n")
             elif cmd == b"LOGIN":
                 sock.sendall(tag + b" OK logged in\r\n")
-            elif cmd == b"EXAMINE":
+            elif cmd in (b"EXAMINE", b"SELECT"):
                 sock.sendall(b"* 1 EXISTS\r\n* OK [UIDVALIDITY 7]\r\n" + tag + b" OK [READ-ONLY] done\r\n")
             elif cmd == b"IDLE":
                 sock.sendall(b"+ idling\r\n")

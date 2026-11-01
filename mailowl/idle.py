@@ -38,7 +38,9 @@ def idle_once(acct: Account, timeout: float, stop: threading.Event | None = None
         if not has_idle:
             typ, data = M.capability()
             has_idle = typ == "OK" and b"IDLE" in b" ".join(d for d in data if d).upper()
-        typ, data = M.select(_quote_mailbox(folder), readonly=True)
+        # 用 SELECT 而不是只读的 EXAMINE：QQ 邮箱只对 SELECT 的文件夹推送 IDLE 通知（实测）。
+        # 这条连接只等通知、从不 FETCH，不会改动任何已读状态；真正收信仍由 fetch 以只读方式完成。
+        typ, data = M.select(_quote_mailbox(folder), readonly=False)
         if typ != "OK":
             raise RuntimeError(f"{acct.name}: 无法打开 {folder}: {data}")
         if not has_idle:
