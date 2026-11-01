@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2F3F8F"/><stop offset="1" stop-color="#1A2456"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="230" fill="url(#bg)"/>
+  <path d="M236 392 C214 330 206 282 214 236 C262 262 302 298 330 342 Z" fill="#FFF4E0"/>
+  <path d="M788 392 C810 330 818 282 810 236 C762 262 722 298 694 342 Z" fill="#FFF4E0"/>
+  <rect x="212" y="322" width="600" height="452" rx="80" fill="#FFF4E0"/>
+  <path d="M254 362 L512 590 L770 362" fill="none" stroke="#23306B" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="388" cy="594" r="68" fill="#FFB020"/>
+  <circle cx="636" cy="594" r="68" fill="#FFB020"/>
+  <circle cx="394" cy="600" r="31" fill="#1A2150"/>
+  <circle cx="630" cy="600" r="31" fill="#1A2150"/>
+  <circle cx="404" cy="588" r="9" fill="#FFF4E0"/>
+  <circle cx="640" cy="588" r="9" fill="#FFF4E0"/>
+  <path d="M488 626 L536 626 L512 676 Z" fill="#FFB020" stroke="#FFB020" stroke-width="12" stroke-linejoin="round"/>
+</svg>

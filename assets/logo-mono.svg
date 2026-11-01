@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- 单色版：猫头鹰剪影，折线、眼睛、喙镂空；改 fill 即可换色 -->
+  <defs>
+    <mask id="cut">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <path d="M254 362 L512 590 L770 362" fill="none" stroke="#000" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="388" cy="594" r="68" fill="#000"/>
+      <circle cx="636" cy="594" r="68" fill="#000"/>
+      <path d="M488 626 L536 626 L512 676 Z" fill="#000" stroke="#000" stroke-width="12" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <g fill="#1F2A5E" mask="url(#cut)">
+    <path d="M236 392 C214 330 206 282 214 236 C262 262 302 298 330 342 Z"/>
+    <path d="M788 392 C810 330 818 282 810 236 C762 262 722 298 694 342 Z"/>
+    <rect x="212" y="322" width="600" height="452" rx="80"/>
+  </g>
+  <g fill="#1F2A5E">
+    <circle cx="394" cy="600" r="31"/>
+    <circle cx="630" cy="600" r="31"/>
+  </g>
+</svg>

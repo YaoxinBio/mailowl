@@ -1,0 +1,31 @@
+[project]
+name = "mailowl"
+version = "0.1.0"
+description = "跑在自己 Mac 上的私人邮件秘书：多邮箱分级、飞书里查往来起草回复、确认后才发送、Bark 紧急提醒"
+readme = "README.md"
+license = "MIT"
+authors = [{name = "Yaoxin Zhang"}]
+requires-python = ">=3.11"
+dependencies = [
+    "lark-channel-sdk>=1.4,<2",
+    "httpx>=0.24,<1",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+mailowl = "mailowl.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/YaoxinBio/mailowl"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mailowl*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

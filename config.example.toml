@@ -1,0 +1,127 @@
+# MailOwl 配置（复制到 ~/.config/mailowl/config.toml）
+# 密码、密钥一律写在同目录的 secrets.toml（chmod 600），不要写在这里。
+
+[general]
+data_dir = "~/.local/share/mailowl"   # 数据库、日志、Agent 会话
+timezone = "Asia/Shanghai"
+# 可选：一两句话介绍你自己和当前在做的事，帮助模型判断什么重要、草稿怎么署名；留空也能用
+# 例：profile = "XX 大学 XX 方向博士生，正在申请 XX 基金；导师 XX；英文署名 XX"
+profile = ""
+# 可选：什么时候用哪个落款模板（见下方 [[signatures]]），例如：
+# signature = "熟人用「熟人」，其他人用「正式」，英文邮件用「英文」；先参考我最近一封给这个人写的带落款的邮件。"
+max_message_bytes = 3000000             # 超过这个大小的邮件只取头部和正文前 300KB（不下载附件）
+
+[llm]
+# 两种后端任选其一：
+#   claude_cli：用本机已登录的 Claude Code（claude -p），模型写 haiku / sonnet / opus
+#   openai：任何 OpenAI 兼容接口，api_key 写在 secrets.toml 的 [llm]，模型写该服务的模型名，例如
+#     DeepSeek   base_url = "https://api.deepseek.com/v1"                        模型 deepseek-chat
+#     通义千问   base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"  模型 qwen-plus / qwen-max
+#     Kimi       base_url = "https://api.moonshot.cn/v1"                         模型名见 Kimi 开放平台文档
+#     智谱       base_url = "https://open.bigmodel.cn/api/paas/v4"               模型名见智谱开放平台文档
+#     OpenAI     base_url = "https://api.openai.com/v1"
+#     OpenRouter base_url = "https://openrouter.ai/api/v1"（也能用 Claude、Gemini）
+#     本地 Ollama base_url = "http://127.0.0.1:11434/v1"（api_key 可留空）
+#   注意：对话 Agent 要调用工具，选支持 function calling 的模型；deepseek-reasoner 这类纯推理模型不行。
+backend = "claude_cli"
+claude_bin = "~/.local/bin/claude"
+base_url = ""
+triage_model = "sonnet"                 # 每封新邮件分级用（量小，用 sonnet 求稳；想省用量可改 haiku）
+agent_model = "sonnet"                  # 对话、起草回复用
+triage_concurrency = 2
+# 上网查资料：对话 Agent 不能直接上网，只能提一个问题，你在飞书卡片上点「同意」后，
+# 交给一个读不到邮箱的研究 Agent 去查。
+#   auto：openai 后端且配了 tavily_api_key 时用它；否则本机有 Claude Code 就用 claude_cli；都没有则关闭
+research_backend = "auto"               # auto / claude_cli / openai / none
+research_model = ""                     # 留空同 agent_model
+
+[feishu]
+domain = "https://open.feishu.cn"
+owner_open_id = ""                      # 留空：首次在飞书里给机器人发配对码（mailowl pair）即可绑定
+body_in_feishu = "on_click"             # on_click：只有点「查看原文」才把正文发到飞书；never：永不发
+body_max_chars = 6000
+
+[bark]
+server = "https://api.day.app"          # 自建 bark-server 就改这里
+group = "MailOwl"
+level2_push = "active"                  # 「需要处理」级别的推送方式：active / timeSensitive / passive / none
+quiet_hours = "23:30-07:30"             # 期间只有「紧急」才推
+escalate_after_minutes = 20             # 紧急邮件这么久没处理就再响一次（0 关闭）
+max_per_hour = 12
+
+[routing]
+level1 = "digest"                       # 「待阅读」级别：digest 进摘要 / immediate 即时卡片
+digest_times = ["08:30", "18:30"]
+digest_include_level0 = true
+urgent_hours = 48                       # 截止时间在 48 小时内的重要邮件升为紧急
+todo_remind_before_minutes = 120
+
+[rules]
+# 地址或域名（"@example.com" 匹配整个域名及子域名）
+vip_senders = []                        # 至少「需要处理」
+mute_senders = []                       # 一律只进摘要
+local_only_senders = []                 # 内容不发给模型（只按规则分级）
+local_only_keywords = []                # 例如 ["审稿", "confidential"]
+
+# ---- 落款模板：草稿卡片上会出现这几个按钮，一键切换 ----
+[[signatures]]
+name = "熟人"
+text = """
+祝好！
+
+（名）"""
+
+[[signatures]]
+name = "正式"
+text = """
+谢谢！
+
+（全名）
+{affiliation}"""
+
+[[signatures]]
+name = "英文"
+text = """
+Best regards,
+（English Name）
+{affiliation_en}"""
+
+# ---- 邮箱：每个 [[accounts]] 一个 ----
+[[accounts]]
+name = "work"                           # 内部名字（secrets.toml 里用它对应密码）
+label = "工作邮箱"
+address = "me@example.edu"
+display_name = ""                       # 发信时显示的名字，例如 "Zhang San"
+protocol = "imap"                       # imap（推荐，可读已发送）/ pop3
+host = "imap.example.edu"
+port = 993
+folders = ["INBOX"]
+sent_folder = "Sent"                    # 已发送文件夹名（Gmail 是 "[Gmail]/Sent Mail"，QQ 是 "Sent Messages"）
+poll_seconds = 180
+backfill_days = 30
+smtp_host = "smtp.example.edu"
+smtp_port = 465
+smtp_security = "ssl"                   # ssl（465）/ starttls（587）
+save_to_sent = false                    # 发出后写入已发送文件夹（Gmail/QQ 会自动保存，保持 false）
+affiliation = ""                        # 落款里的单位，可用 \n 分两行；替换落款模板里的 {affiliation}
+affiliation_en = ""                     # 英文单位，替换 {affiliation_en}
+
+# [[accounts]]
+# name = "gmail"
+# label = "Gmail"
+# address = "you@gmail.com"
+# protocol = "imap"
+# host = "imap.gmail.com"
+# sent_folder = "[Gmail]/Sent Mail"
+# smtp_host = "smtp.gmail.com"
+# smtp_port = 465
+
+# [[accounts]]
+# name = "old"
+# label = "旧邮箱"
+# address = "you@example.com"
+# protocol = "pop3"
+# host = "pop.example.com"
+# port = 995
+# smtp_host = "smtp.example.com"
+# imap_id = true                        # 163/126 的 IMAP 需要
