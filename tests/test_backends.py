@@ -228,3 +228,38 @@ def test_local_model_urls_bypass_proxy():
         assert is_local_url(u), u
     for u in ("https://api.deepseek.com/v1", "https://api.openai.com/v1", "https://8.8.8.8/v1"):
         assert not is_local_url(u), u
+
+
+def test_separate_local_triage_backend(cfg):
+    p = cfg.path
+    p.write_text(p.read_text("utf-8").replace("[general]", '[llm.triage]\nbackend = "openai"\n'
+                                              'base_url = "http://127.0.0.1:11434/v1"\nmodel = "qwen3:8b"\n[general]', 1), "utf-8")
+    sec = p.with_name("secrets.toml")
+    sec.write_text(sec.read_text("utf-8") + '\n[llm.triage]\napi_key = "local"\n', "utf-8")
+    c = load_config(p)
+    assert c.llm.triage == {"backend": "openai", "base_url": "http://127.0.0.1:11434/v1", "model": "qwen3:8b",
+                            "api_key": "local"}
+    from mailowl.db import DB
+    from mailowl.llm import make_llm
+    r = make_llm(c, DB(c.db_path))
+    assert isinstance(r.main, ClaudeCLI) and isinstance(r.triager, OpenAIChat)
+    assert r.triager.base == "http://127.0.0.1:11434/v1" and r.triager.triage_model == "qwen3:8b"
+    assert r.triager.api_key == "local"
+    p.write_text(p.read_text("utf-8").replace('model = "qwen3:8b"', 'model = "haiku"'), "utf-8")
+    with pytest.raises(ConfigError, match="haiku"):
+        load_config(p)
+
+
+def test_bark_minimal_content_hides_mail(cfg, monkeypatch):
+    from mailowl import bark as bark_mod
+    seen = []
+
+    def handler(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, json={"code": 200})
+
+    real = httpx.AsyncClient
+    monkeypatch.setattr(bark_mod.httpx, "AsyncClient", lambda **kw: real(transport=httpx.MockTransport(handler), **kw))
+    cfg.bark.content = "minimal"
+    assert run(bark_mod.Bark(cfg.bark).push("需要处理｜请补交 CV", "王老师：请在周五前提交", level="active"))
+    assert seen[0]["title"] == "MailOwl" and "CV" not in json.dumps(seen[0], ensure_ascii=False)

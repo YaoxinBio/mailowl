@@ -121,6 +121,16 @@ def cmd_check(args) -> int:
                 report(f"模型接口 {model}", True, f"{cfg.llm.base_url} → {(msg.get('content') or '').strip()[:20]}")
             except Exception as e:
                 report(f"模型接口 {model}", False, str(e)[:300])
+    t = cfg.llm.triage
+    if t.get("backend") == "openai":
+        from .db import DB
+        from .openai_compat import OpenAIChat
+        try:
+            msg = asyncio.run(OpenAIChat(cfg, DB(cfg.db_path), base_url=t["base_url"], api_key=t.get("api_key", "")).chat(
+                model=t["model"], messages=[{"role": "user", "content": "只回复 ok"}], timeout=120, kind="check"))
+            report(f"分级模型 {t['model']}", True, f"{t['base_url']} → {(msg.get('content') or '').strip()[:20]}")
+        except Exception as e:
+            report(f"分级模型 {t['model']}", False, str(e)[:300])
     rb = research_backend(cfg)
     hint = {"claude_cli": "Claude CLI（WebSearch / WebFetch）",
             "openai": "OpenAI 兼容接口 + " + ("Tavily 搜索" if cfg.llm.tavily_api_key else "只能打开网址（没配 Tavily，不能搜索）"),

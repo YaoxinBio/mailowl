@@ -76,6 +76,9 @@ class LLMConfig:
     research_model: str = ""          # 留空用 agent_model
     tavily_api_key: str = ""          # openai 研究后端的搜索接口（tavily.com），写在 secrets.toml 的 [llm]
     agent_web: bool = False           # 已废弃：对话 Agent 不再直接上网，保留只为兼容旧配置
+    # 可选：分级单独用另一个模型，例如本地 Ollama，让每封新邮件都不交给模型厂商；对话起草仍用上面的设置。
+    # [llm.triage] backend = "openai" / base_url / model；api_key 写在 secrets.toml 的 [llm.triage]
+    triage: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -99,6 +102,7 @@ class BarkConfig:
     escalate_after_minutes: int = 20  # 紧急邮件无人处理时再次响铃
     max_per_hour: int = 12
     coalesce_seconds: int = 30
+    content: str = "full"             # full：标题带主题、正文带摘要；minimal：只提示「有新提醒」，不带任何邮件内容
 
 
 @dataclass
@@ -202,7 +206,8 @@ def load_config(path: str | os.PathLike | None = None) -> Config:
 
     def section(name, cls):
         data = dict(raw.get(name, {}))
-        data.update(secrets.get(name, {}))
+        for k, v in secrets.get(name, {}).items():        # 子表（如 [llm.triage]）按键合并
+            data[k] = {**data[k], **v} if isinstance(v, dict) and isinstance(data.get(k), dict) else v
         return _fill(cls, data, f"[{name}]")
 
     feishu = section("feishu", FeishuConfig)
@@ -214,6 +219,8 @@ def load_config(path: str | os.PathLike | None = None) -> Config:
     for attr, env in (("api_key", _env_key("llm", "api_key")), ("tavily_api_key", _env_key("tavily", "api_key"))):
         if os.environ.get(env):
             setattr(llm, attr, os.environ[env])
+    if llm.triage and os.environ.get(_env_key("triage", "api_key")):
+        llm.triage["api_key"] = os.environ[_env_key("triage", "api_key")]
     if os.environ.get(_env_key("bark", "keys")):
         bark.device_keys = [k for k in os.environ[_env_key("bark", "keys")].split(",") if k]
 
@@ -278,6 +285,20 @@ def load_config(path: str | os.PathLike | None = None) -> Config:
         if bad:
             raise ConfigError(f"[llm] 用 openai 后端时 {' / '.join(bad)} 要写该服务的模型名（例如 deepseek-chat），"
                               "haiku/sonnet/opus 只适用于 claude_cli")
+    t = cfg.llm.triage
+    if t:
+        extra = set(t) - {"backend", "base_url", "model", "api_key"}
+        if extra:
+            raise ConfigError(f"[llm.triage] 中有未知配置项: {', '.join(sorted(extra))}")
+        t.setdefault("backend", "openai")
+        if t["backend"] not in ("claude_cli", "openai"):
+            raise ConfigError("[llm.triage] backend 只能是 claude_cli 或 openai")
+        if t["backend"] == "openai" and not (t.get("base_url") and t.get("model")):
+            raise ConfigError("[llm.triage] 用 openai 时要写 base_url 和 model，例如本地 Ollama：http://127.0.0.1:11434/v1")
+        if t["backend"] == "openai" and t["model"] in CLAUDE_ALIASES:
+            raise ConfigError("[llm.triage] 的 model 要写该服务的模型名，haiku/sonnet/opus 只适用于 claude_cli")
+    if cfg.bark.content not in ("full", "minimal"):
+        raise ConfigError("[bark] content 只能是 full 或 minimal")
     if cfg.routing.level1 not in ("digest", "immediate"):
         raise ConfigError("[routing] level1 只能是 digest 或 immediate")
     if cfg.feishu.body_in_feishu not in ("on_click", "never"):

@@ -35,6 +35,13 @@ triage_concurrency = 2
 research_backend = "auto"               # auto / claude_cli / openai / none
 research_model = ""                     # 留空同 agent_model
 
+# 隐私选项：分级单独用本地模型（每封新邮件都不交给模型厂商），对话起草仍用上面的模型。
+# 需要密钥的服务把 api_key 写在 secrets.toml 的 [llm.triage]。
+# [llm.triage]
+# backend = "openai"
+# base_url = "http://127.0.0.1:11434/v1"   # 本地 Ollama
+# model = "qwen3:8b"
+
 [feishu]
 domain = "https://open.feishu.cn"
 owner_open_id = ""                      # 留空：首次在飞书里给机器人发配对码（mailowl pair）即可绑定
@@ -48,6 +55,7 @@ level2_push = "active"                  # 「需要处理」级别的推送方�
 quiet_hours = "23:30-07:30"             # 期间只有「紧急」才推
 escalate_after_minutes = 20             # 紧急邮件这么久没处理就再响一次（0 关闭）
 max_per_hour = 12
+content = "full"                        # full：通知带主题和摘要；minimal：只提示「有新提醒」，不带邮件内容
 
 [routing]
 level1 = "digest"                       # 「待阅读」级别：digest 进摘要 / immediate 即时卡片

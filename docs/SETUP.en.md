@@ -94,6 +94,19 @@ api_key = "sk-..."
 
 Run `mailowl check` afterwards; it makes one real call to confirm the model works. The chat agent calls tools, so pick a model with function calling (pure reasoning models such as deepseek-reasoner will not work).
 
+
+To keep triage on your machine (no new message is sent to a model vendor) while drafting still uses Claude:
+
+```toml
+# config.toml
+[llm.triage]
+backend = "openai"
+base_url = "http://127.0.0.1:11434/v1"   # local Ollama
+model = "qwen3:8b"
+```
+
+Other privacy switches are listed under "Privacy mode" in the README: `body_in_feishu = "never"`, `[bark] content = "minimal"`, `research_backend = "none"`.
+
 ## Privacy and safety boundaries
 
 - Raw mail is stored only in the host's SQLite database (`~/.local/share/mailowl/mailowl.db`). Attachments are not downloaded; they are fetched from the server only when you attach them to a draft, kept temporarily, and deleted once the draft is sent or discarded.

@@ -51,6 +51,8 @@ class Bark:
         if not self.enabled:
             log.info("Bark 未配置，跳过：%s", title)
             return False
+        if self.cfg.content == "minimal":           # 不让任何邮件内容经过 Bark 服务器和苹果推送
+            title, body, subtitle = "MailOwl", "有新的提醒，点开在飞书里查看", ""
         ok = True
         async with httpx.AsyncClient(timeout=15) as client:
             for key in self.cfg.device_keys:

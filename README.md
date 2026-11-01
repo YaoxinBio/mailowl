@@ -69,6 +69,19 @@ MailOwl treats incoming email as untrusted input and enforces boundaries in code
 | **Inbox leakage to third-party clouds** | All messages stay in local SQLite. Your chat app receives only the sender, subject, and summary by default (full body is sent only when you ask). You can also block specific senders or keywords from ever reaching the model. |
 | **Unauthorized chat access** | The bot binds to a single user account via a one-time pairing code and refuses everyone else. |
 
+## Privacy mode
+
+Every item below is optional — mix and match.
+
+| What leaves your Mac | Default | Most private setting |
+|---|---|---|
+| Mail text sent to a model | every new message (for triage) and the ones you chat about | `[llm.triage]` pointing at a local Ollama model: triage never sends mail to a model vendor. Point the main backend at a local model too and nothing does. |
+| Chat app (Feishu / Lark) | sender, subject and summary; the body only on request | `body_in_feishu = "never"` |
+| Phone alerts (Bark) | subject and summary | `[bark] content = "minimal"` — alerts say only that something needs attention |
+| Web research | only the questions you approve | `research_backend = "none"` |
+
+Triage is a short, tool-free classification task, which suits small local models; drafting is multi-step tool use and benefits from a larger model. Local inference has been tested with a 27B Qwen model; smaller models have not been benchmarked yet.
+
 ## Quick Start
 
 **Try it in 30 seconds — no mailbox, no chat bot needed.** `mailowl demo` triages four fictional emails, drafts a reply from past correspondence, and shows a prompt-injection email failing to make the agent send anything:

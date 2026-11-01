@@ -54,8 +54,9 @@ class AgentResult:
 
 
 class ClaudeCLI:
-    def __init__(self, cfg: Config):
+    def __init__(self, cfg: Config, *, triage_model: str | None = None):
         self.cfg = cfg
+        self.triage_model = triage_model or cfg.llm.triage_model
         self.bin = cfg.llm.claude_bin
         self.workdir = cfg.agent_workdir
 
@@ -97,7 +98,7 @@ class ClaudeCLI:
 
     async def structured(self, prompt: str, schema: dict, *, system: str, model: str | None = None,
                          timeout: int | None = None) -> tuple[dict[str, Any], float]:
-        args = ["-p", "--output-format", "json", "--model", model or self.cfg.llm.triage_model,
+        args = ["-p", "--output-format", "json", "--model", model or self.triage_model,
                 "--tools", "", "--no-session-persistence", "--strict-mcp-config",
                 "--disable-slash-commands", "--setting-sources", "",
                 "--system-prompt", system, "--json-schema", json.dumps(schema, ensure_ascii=False)]
@@ -167,13 +168,13 @@ def research_backend(cfg: Config) -> str | None:
 
 
 class LLMRouter:
-    """分级、对话走主后端；联网研究走研究后端（可以与主后端不同）。"""
+    """对话走主后端；分级可单独指定后端（如本地模型）；联网研究走研究后端。"""
 
-    def __init__(self, main, researcher=None):
-        self.main, self.researcher = main, researcher
+    def __init__(self, main, researcher=None, triager=None):
+        self.main, self.researcher, self.triager = main, researcher, triager or main
 
     async def structured(self, *a, **kw):
-        return await self.main.structured(*a, **kw)
+        return await self.triager.structured(*a, **kw)
 
     async def agent(self, *a, **kw):
         return await self.main.agent(*a, **kw)
@@ -194,7 +195,13 @@ def make_llm(cfg: Config, db) -> LLMRouter:
         return backends[name]
 
     rb = research_backend(cfg)
-    return LLMRouter(get(cfg.llm.backend), get(rb) if rb else None)
+    t = cfg.llm.triage
+    triager = None
+    if t.get("backend") == "openai":
+        triager = OpenAIChat(cfg, db, base_url=t["base_url"], api_key=t.get("api_key", ""), triage_model=t["model"])
+    elif t.get("backend") == "claude_cli":
+        triager = ClaudeCLI(cfg, triage_model=t.get("model"))
+    return LLMRouter(get(cfg.llm.backend), get(rb) if rb else None, triager)
 
 
 class FakeLLM:

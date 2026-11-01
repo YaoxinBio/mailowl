@@ -126,9 +126,12 @@ RESEARCH_TOOLS = [
 
 
 class OpenAIChat:
-    def __init__(self, cfg: Config, db: DB, transport: httpx.AsyncBaseTransport | None = None):
+    def __init__(self, cfg: Config, db: DB, transport: httpx.AsyncBaseTransport | None = None, *,
+                 base_url: str | None = None, api_key: str | None = None, triage_model: str | None = None):
         self.cfg, self.db = cfg, db
-        self.base = cfg.llm.base_url.rstrip("/")
+        self.base = (base_url or cfg.llm.base_url).rstrip("/")
+        self.api_key = cfg.llm.api_key if api_key is None else api_key
+        self.triage_model = triage_model or cfg.llm.triage_model
         self.transport = transport          # 测试用
 
     # ---------------------------------------------------------------- HTTP
@@ -142,7 +145,7 @@ class OpenAIChat:
                 body["tool_choice"] = tool_choice
         if json_mode:
             body["response_format"] = {"type": "json_object"}
-        headers = {"Authorization": f"Bearer {self.cfg.llm.api_key}"} if self.cfg.llm.api_key else {}
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         last = ""
         for attempt in range(3):
             try:
@@ -211,7 +214,7 @@ class OpenAIChat:
                          timeout: int | None = None) -> tuple[dict[str, Any], float]:
         sys_prompt = (f"{system}\n\n只输出一个 JSON 对象（json），不要输出任何其他文字。"
                       f"它必须符合这个 JSON Schema：\n{json.dumps(schema, ensure_ascii=False)}")
-        msg = await self.chat(model=model or self.cfg.llm.triage_model, json_mode=True, kind="triage",
+        msg = await self.chat(model=model or self.triage_model, json_mode=True, kind="triage",
                               messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": prompt}],
                               timeout=timeout or self.cfg.llm.triage_timeout)
         return conform(extract_json(msg.get("content") or ""), schema), 0.0

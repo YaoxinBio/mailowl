@@ -94,6 +94,19 @@ api_key = "sk-..."
 
 改完运行 `mailowl check`，会实际调用一次模型确认能通。
 
+
+只想让分级在本地完成（每封新邮件都不交给模型厂商），对话起草仍用 Claude：
+
+```toml
+# config.toml
+[llm.triage]
+backend = "openai"
+base_url = "http://127.0.0.1:11434/v1"   # 本地 Ollama
+model = "qwen3:8b"
+```
+
+其他隐私开关见 README 的「隐私模式」：`body_in_feishu = "never"`、`[bark] content = "minimal"`、`research_backend = "none"`。
+
 ## 隐私与安全边界
 
 - 原始邮件只存在运行机的 SQLite（`~/.local/share/mailowl/mailowl.db`），附件不下载，需要时才从服务器取回；草稿要带的附件临时存在本机，发出或取消后即删除。
