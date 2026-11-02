@@ -141,6 +141,11 @@ def cmd_check(args) -> int:
             status = (st.stdout or st.stderr).strip().splitlines()[-1:] or ["?"]
             report(f"分级模型 Codex {t.get('model') or '（默认模型）'}", ver.returncode == 0 and st.returncode == 0,
                    f"{ver.stdout.strip()}，{status[0]}")
+            report("Codex 登录凭据共用", cx.auth_linked(),
+                   f"{cx.home / 'auth.json'} → {cx.src_home / 'auth.json'}" if cx.auth_linked() else
+                   f"{cx.home / 'auth.json'} 已不是软链接，与本机 Codex 的登录可能分叉：删掉它再运行 check 即可重建")
+            report("Codex 外层沙箱", cx.outer_sandbox, "sandbox-exec：不能执行命令、读不到 MailOwl 的配置和数据"
+                   if cx.outer_sandbox else "非 macOS：只有 Codex 自带的只读沙箱")
         except Exception as e:
             report("分级模型 Codex", False, str(e)[:300])
     rb = research_backend(cfg)

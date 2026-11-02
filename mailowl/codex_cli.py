@@ -48,6 +48,16 @@ class CodexCLI:
         self.home = cfg.data_dir / "codex-home"          # 独立的 CODEX_HOME：没有 AGENTS.md
         self.work = cfg.data_dir / "codex-work"          # 每次调用的临时目录（schema、输出、空的工作目录）
         self.src_home = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
+        if not self.outer_sandbox:
+            log.warning("没有 %s（非 macOS）：Codex 只有它自己的只读沙箱，模型仍能读到本机文件", SANDBOX_EXEC)
+
+    @property
+    def outer_sandbox(self) -> bool:
+        return sys.platform == "darwin" and Path(SANDBOX_EXEC).exists()
+
+    def auth_linked(self) -> bool:
+        link = self.home / "auth.json"
+        return link.is_symlink() and link.resolve() == (self.src_home / "auth.json").resolve()
 
     @property
     def bin(self) -> str:
@@ -93,7 +103,7 @@ class CodexCLI:
         if model or self.model:
             args += ["-m", model or self.model]
         args.append("-")                                  # 提示从 stdin 读：邮件正文可能很长
-        if sys.platform == "darwin" and Path(SANDBOX_EXEC).exists():
+        if self.outer_sandbox:
             args = [SANDBOX_EXEC, "-p", self.sandbox_profile(), *args]
         return args
 

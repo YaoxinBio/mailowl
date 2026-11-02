@@ -129,7 +129,7 @@ For step-by-step configuration (mailbox app passwords, Feishu/Lark bot setup, an
 | **Claude Code CLI** (default) | `backend = "claude_cli"` | Reuses the Claude Code CLI session already logged in on the host |
 | **OpenAI-compatible** | `backend = "openai"`, `base_url`, `api_key` | DeepSeek, Qwen, Kimi, OpenAI, Grok, OpenRouter, etc. (requires function calling) |
 | **Local model (Ollama, LM Studio …)** | `backend = "openai"`, `base_url = "http://127.0.0.1:11434/v1"` | mail text never leaves your Mac for inference; tested with a 27B Qwen model |
-| **Codex CLI** (triage only) | `[llm.triage]` `backend = "codex_cli"` | uses the ChatGPT plan logged in on the host; isolated from your Codex config and sandboxed so it cannot run commands |
+| **Codex CLI** (triage only) | `[llm.triage]` `backend = "codex_cli"` | uses the ChatGPT plan logged in on the host; isolated from your Codex config; on macOS also sandboxed so it cannot run commands |
 
 ## Status
 

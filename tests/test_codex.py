@@ -84,6 +84,10 @@ def test_codex_structured_is_isolated(cfg, tmp_path, monkeypatch):
     assert (home / "auth.json").is_symlink() and (home / "auth.json").resolve() == (src / "auth.json").resolve()
     assert "分级规则".encode() in proc.stdin and "邮件正文".encode() in proc.stdin
     assert not list(cx.work.iterdir()), "临时目录用完即删"
+    assert cx.auth_linked()
+    (home / "auth.json").unlink()
+    (home / "auth.json").write_text("{}")                                       # 被替换成普通文件：要能看出来
+    assert not cx.auth_linked()
 
 
 def test_codex_wrapped_in_outer_sandbox_on_macos(cfg, tmp_path, monkeypatch):
