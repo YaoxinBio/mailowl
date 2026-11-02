@@ -299,15 +299,15 @@ def load_config(path: str | os.PathLike | None = None) -> Config:
                               "haiku/sonnet/opus 只适用于 claude_cli")
     t = cfg.llm.triage
     if t:
-        extra = set(t) - {"backend", "base_url", "model", "api_key"}
+        extra = set(t) - {"backend", "base_url", "model", "api_key", "effort", "codex_bin"}
         if extra:
             raise ConfigError(f"[llm.triage] 中有未知配置项: {', '.join(sorted(extra))}")
         t.setdefault("backend", "openai")
-        if t["backend"] not in ("claude_cli", "openai"):
-            raise ConfigError("[llm.triage] backend 只能是 claude_cli 或 openai")
+        if t["backend"] not in ("claude_cli", "openai", "codex_cli"):
+            raise ConfigError("[llm.triage] backend 只能是 claude_cli、openai 或 codex_cli")
         if t["backend"] == "openai" and not (t.get("base_url") and t.get("model")):
             raise ConfigError("[llm.triage] 用 openai 时要写 base_url 和 model，例如本地 Ollama：http://127.0.0.1:11434/v1")
-        if t["backend"] == "openai" and t["model"] in CLAUDE_ALIASES:
+        if t["backend"] in ("openai", "codex_cli") and t.get("model") in CLAUDE_ALIASES:
             raise ConfigError("[llm.triage] 的 model 要写该服务的模型名，haiku/sonnet/opus 只适用于 claude_cli")
     if cfg.language not in LANG_DIRECTIVE:
         raise ConfigError("[general] language 只能是 zh 或 en")

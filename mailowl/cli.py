@@ -131,6 +131,18 @@ def cmd_check(args) -> int:
             report(f"分级模型 {t['model']}", True, f"{t['base_url']} → {(msg.get('content') or '').strip()[:20]}")
         except Exception as e:
             report(f"分级模型 {t['model']}", False, str(e)[:300])
+    elif t.get("backend") == "codex_cli":
+        from .codex_cli import CodexCLI
+        cx = CodexCLI(cfg)
+        try:
+            cx.prepare()
+            ver = subprocess.run([cx.bin, "--version"], capture_output=True, text=True, timeout=30, env=cx._env())
+            st = subprocess.run([cx.bin, "login", "status"], capture_output=True, text=True, timeout=30, env=cx._env())
+            status = (st.stdout or st.stderr).strip().splitlines()[-1:] or ["?"]
+            report(f"分级模型 Codex {t.get('model') or '（默认模型）'}", ver.returncode == 0 and st.returncode == 0,
+                   f"{ver.stdout.strip()}，{status[0]}")
+        except Exception as e:
+            report("分级模型 Codex", False, str(e)[:300])
     rb = research_backend(cfg)
     hint = {"claude_cli": "Claude CLI（WebSearch / WebFetch）",
             "openai": "OpenAI 兼容接口 + " + ("Tavily 搜索" if cfg.llm.tavily_api_key else "只能打开网址（没配 Tavily，不能搜索）"),

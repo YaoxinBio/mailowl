@@ -129,6 +129,7 @@ mailowl service install   # 装成后台服务（登录后自动启动，崩溃�
 | **Claude Code CLI**（默认） | `backend = "claude_cli"` | 直接复用宿主机上已登录的 Claude Code CLI |
 | **OpenAI 兼容接口** | `backend = "openai"`、`base_url`、`api_key` | 支持 DeepSeek、通义千问、Kimi、OpenAI、Grok、OpenRouter 等（模型需支持工具调用） |
 | **本地模型（Ollama、LM Studio 等）** | `backend = "openai"`、`base_url = "http://127.0.0.1:11434/v1"` | 邮件内容不出本机；已用 27B 的 Qwen 实测 |
+| **Codex CLI**（仅分级） | `[llm.triage]` `backend = "codex_cli"` | 用宿主机上已登录的 ChatGPT 订阅；与你自己的 Codex 配置隔离，并放进沙箱，执行不了任何命令 |
 
 ## 现状
 

@@ -42,6 +42,12 @@ research_model = ""                     # 留空同 agent_model
 # backend = "openai"
 # base_url = "http://127.0.0.1:11434/v1"   # 本地 Ollama
 # model = "qwen3:8b"
+#
+# 或者让分级走本机已登录的 Codex CLI（ChatGPT 订阅额度；每封约 20–30 秒）：
+# [llm.triage]
+# backend = "codex_cli"
+# model = "gpt-6.1-sol"
+# effort = "low"
 
 [feishu]
 domain = "https://open.feishu.cn"

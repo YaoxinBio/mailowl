@@ -105,6 +105,17 @@ base_url = "http://127.0.0.1:11434/v1"   # 本地 Ollama
 model = "qwen3:8b"
 ```
 
+也可以让分级走本机已登录的 Codex CLI（`codex login`），用 ChatGPT 订阅额度，适合 Claude 额度紧张时分担：
+
+```toml
+[llm.triage]
+backend = "codex_cli"
+model = "gpt-6.1-sol"      # 不写就用 Codex 的默认模型
+effort = "low"             # 推理强度；分级用 low 足够
+```
+
+MailOwl 给 Codex 单独建一个 `CODEX_HOME`（只软链接 `auth.json`），不读你的 `~/.codex/config.toml` 和 `AGENTS.md`；macOS 上外面再套一层沙箱，Codex 执行不了任何命令，也读不到 MailOwl 的配置和数据目录。每封邮件约 20–30 秒（主要是 CLI 启动开销），经代理约 5–6 MB 流量。
+
 其他隐私开关见 README 的「隐私模式」：`body_in_feishu = "never"`、`[bark] content = "minimal"`、`research_backend = "none"`。
 
 ## 隐私与安全边界

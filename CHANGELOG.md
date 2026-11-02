@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Triage can run on the Codex CLI (`[llm.triage] backend = "codex_cli"`), using the ChatGPT plan on the host. Codex gets its own `CODEX_HOME` (so the user's `AGENTS.md` and config are not loaded) and, on macOS, an outer `sandbox-exec` profile: it cannot run commands or read MailOwl's config and data directories.
 - Digests are now logged: sent (with counts and the message id), skipped because nothing is new, or not sent because no chat user is paired.
 
 ## 0.1.0 — 2026-11-01

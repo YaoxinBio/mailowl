@@ -105,6 +105,17 @@ base_url = "http://127.0.0.1:11434/v1"   # local Ollama
 model = "qwen3:8b"
 ```
 
+Triage can also run on the Codex CLI logged in on the host (`codex login`), using your ChatGPT plan — handy when Claude usage is tight:
+
+```toml
+[llm.triage]
+backend = "codex_cli"
+model = "gpt-6.1-sol"      # omit to use Codex's default model
+effort = "low"             # reasoning effort; low is enough for triage
+```
+
+MailOwl gives Codex its own `CODEX_HOME` (only `auth.json` is symlinked), so your `~/.codex/config.toml` and `AGENTS.md` are not loaded. On macOS it also wraps Codex in an outer sandbox: Codex cannot run any command and cannot read MailOwl's config or data directories. Each message takes about 20–30 s, mostly CLI start-up, and about 5–6 MB of traffic.
+
 Other privacy switches are listed under "Privacy mode" in the README: `body_in_feishu = "never"`, `[bark] content = "minimal"`, `research_backend = "none"`.
 
 ## Privacy and safety boundaries
