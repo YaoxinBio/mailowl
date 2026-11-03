@@ -6,7 +6,7 @@ import socket
 import httpx
 import pytest
 
-from mailowl.config import ConfigError, load_config
+from mailowl.config import Backend, ConfigError, load_config
 from mailowl.llm import ClaudeCLI, FakeLLM, LLMError, research_backend
 from mailowl.openai_compat import OpenAIChat, conform, extract_json, trim_history
 from mailowl.tools import MailTools
@@ -38,7 +38,7 @@ def test_claude_agent_has_no_web_and_research_has_no_mailbox(cfg, monkeypatch):
 
 # ---------------------------------------------------------------- 研究审批流程
 def test_research_needs_approval_and_feeds_back(cfg, db):
-    cfg.llm.research_backend = "claude_cli"
+    cfg.llm.research_backend = "claude"
     bind_owner(db)
     llm = FakeLLM(research_reply="ISMB 2027 截稿 1 月 20 日（来源 https://example.org）")
     svc, bot = make_service(cfg, db, llm)
@@ -72,7 +72,7 @@ def test_research_needs_approval_and_feeds_back(cfg, db):
 
 
 def test_research_rejected_and_unavailable(cfg, db):
-    cfg.llm.research_backend = "claude_cli"
+    cfg.llm.research_backend = "claude"
     bind_owner(db)
     llm = FakeLLM()
     svc, bot = make_service(cfg, db, llm)
@@ -97,10 +97,11 @@ def test_research_interrupted_by_restart_is_marked_failed(cfg, db):
 
 
 # ---------------------------------------------------------------- OpenAI 兼容接口
-def openai_cfg(cfg):
-    cfg.llm.backend, cfg.llm.base_url, cfg.llm.api_key = "openai", "https://llm.test/v1", "sk-test"
-    cfg.llm.triage_model = cfg.llm.agent_model = "deepseek-chat"
-    return cfg
+def openai_backend(cfg, **kw):
+    b = Backend(name="ds", type="openai", base_url="https://llm.test/v1", api_key="sk-test", model="deepseek-chat", **kw)
+    cfg.llm.backends["ds"] = b
+    cfg.llm.agent_backend = cfg.llm.triage_backend = "ds"
+    return b
 
 
 def scripted(replies, requests):
@@ -114,7 +115,7 @@ def scripted(replies, requests):
 
 
 def test_openai_agent_tool_loop_and_history(cfg, db):
-    openai_cfg(cfg)
+    b = openai_backend(cfg)
     mid = add_mail(db, "1", subject="Need CV")
     reqs = []
     replies = [
@@ -125,7 +126,7 @@ def test_openai_agent_tool_loop_and_history(cfg, db):
         {"content": "他们要 CV。"},
         {"content": "好的，第二轮。"},
     ]
-    llm = OpenAIChat(cfg, db, transport=scripted(replies, reqs))
+    llm = OpenAIChat(cfg, db, b, transport=scripted(replies, reqs))
     res = run(llm.agent("这封要什么？", scope=f"mail:{mid}", session_id=None, system="sys"))
     assert res.text == "他们要 CV。" and res.turns == 2
     assert reqs[0]["model"] == "deepseek-chat" and {t["function"]["name"] for t in reqs[0]["tools"]} >= {"get_mail", "save_draft"}
@@ -140,21 +141,16 @@ def test_openai_agent_tool_loop_and_history(cfg, db):
 
 
 def test_llm_extra_body_sent_in_every_tool_round(cfg, db, tmp_path):
-    openai_cfg(cfg)
-    cfg.llm.extra_body = {"thinking": {"type": "disabled"}}
+    b = openai_backend(cfg, extra_body={"thinking": {"type": "disabled"}})
     mid = add_mail(db, "1", subject="Need CV")
     reqs = []
     replies = [{"content": None, "tool_calls": [{"id": "c1", "type": "function", "function": {
                    "name": "get_mail", "arguments": json.dumps({"mail_id": mid})}}]},
                {"content": "他们要 CV。"}]
-    res = run(OpenAIChat(cfg, db, transport=scripted(replies, reqs)).agent(
+    res = run(OpenAIChat(cfg, db, b, transport=scripted(replies, reqs)).agent(
         "这封要什么？", scope=f"mail:{mid}", session_id=None, system="sys"))
     assert res.text == "他们要 CV。" and len(reqs) == 2
     assert all(r["thinking"] == {"type": "disabled"} and r["model"] == "deepseek-chat" for r in reqs)
-    assert OpenAIChat(cfg, db, extra_body={}).extra_body == {}, "单独的分级后端不继承 [llm] 的参数"
-    assert ClaudeCLI(cfg).research_default_model() == "sonnet", "对话不用 Claude 时，Claude 研究不能拿 deepseek 的模型名"
-    cfg.llm.backend = "claude_cli"
-    assert ClaudeCLI(cfg).research_default_model() == cfg.llm.agent_model
 
 
 def test_llm_extra_body_config(cfg):
@@ -176,21 +172,22 @@ def test_llm_extra_body_config(cfg):
 
 
 def test_openai_tool_round_cap(cfg, db):
-    openai_cfg(cfg).llm.max_tool_rounds = 2
+    b = openai_backend(cfg)
+    cfg.llm.max_tool_rounds = 2
     reqs = []
     loop_call = {"content": "", "tool_calls": [{"id": "x", "type": "function",
                                                 "function": {"name": "list_todos", "arguments": "{}"}}]}
-    llm = OpenAIChat(cfg, db, transport=scripted([loop_call, loop_call, {"content": "就这些。"}], reqs))
+    llm = OpenAIChat(cfg, db, b, transport=scripted([loop_call, loop_call, {"content": "就这些。"}], reqs))
     res = run(llm.agent("hi", scope="chat:main", session_id=None, system="sys"))
     assert res.text == "就这些。" and reqs[-1]["tool_choice"] == "none"
 
 
 def test_openai_structured_and_helpers(cfg, db):
-    openai_cfg(cfg)
+    b = openai_backend(cfg)
     reqs = []
     content = '```json\n{"level": "2", "category": "action", "summary": "交 CV", "analysis": "", "deadline": null,' \
               ' "needs_reply": "true", "action_items": "提交 CV", "tags": []}\n```'
-    llm = OpenAIChat(cfg, db, transport=scripted([{"content": content}], reqs))
+    llm = OpenAIChat(cfg, db, b, transport=scripted([{"content": content}], reqs))
     out, cost = run(llm.structured("邮件……", SCHEMA, system="分拣"))
     assert out["level"] == 2 and out["needs_reply"] is True and out["action_items"] == ["提交 CV"]
     assert reqs[0]["response_format"] == {"type": "json_object"} and "json" in reqs[0]["messages"][0]["content"]
@@ -206,10 +203,10 @@ def test_openai_structured_and_helpers(cfg, db):
 
 
 def test_openai_http_error_raises(cfg, db):
-    openai_cfg(cfg)
+    b = openai_backend(cfg)
     t = httpx.MockTransport(lambda r: httpx.Response(401, json={"error": "bad key"}))
     with pytest.raises(LLMError, match="401"):
-        run(OpenAIChat(cfg, db, transport=t).chat(model="m", messages=[]))
+        run(OpenAIChat(cfg, db, b, transport=t).chat(model="m", messages=[]))
 
 
 def test_openai_config_validation(cfg, tmp_path):
@@ -222,7 +219,8 @@ def test_openai_config_validation(cfg, tmp_path):
     p.write_text(text.replace('agent_web = true', 'agent_web = true\ntriage_model = "deepseek-chat"\n'
                                                   'agent_model = "deepseek-chat"'), "utf-8")
     c = load_config(p)
-    assert c.llm.backend == "openai" and c.llm.agent_model == "deepseek-chat"
+    a = c.llm.role("agent")
+    assert a.type == "openai" and a.model == "deepseek-chat" and c.llm.role("triage") is a
 
 
 # ---------------------------------------------------------------- web_fetch 拦截内网
@@ -273,13 +271,13 @@ def test_separate_local_triage_backend(cfg):
     sec = p.with_name("secrets.toml")
     sec.write_text(sec.read_text("utf-8") + '\n[llm.triage]\napi_key = "local"\n', "utf-8")
     c = load_config(p)
-    assert c.llm.triage == {"backend": "openai", "base_url": "http://127.0.0.1:11434/v1", "model": "qwen3:8b",
-                            "api_key": "local"}
+    t = c.llm.role("triage")
+    assert (t.type, t.base_url, t.model, t.api_key) == ("openai", "http://127.0.0.1:11434/v1", "qwen3:8b", "local")
     from mailowl.db import DB
     from mailowl.llm import make_llm
     r = make_llm(c, DB(c.db_path))
     assert isinstance(r.main, ClaudeCLI) and isinstance(r.triager, OpenAIChat)
-    assert r.triager.base == "http://127.0.0.1:11434/v1" and r.triager.triage_model == "qwen3:8b"
+    assert r.triager.base == "http://127.0.0.1:11434/v1" and r.triager.model == "qwen3:8b"
     assert r.triager.api_key == "local"
     p.write_text(p.read_text("utf-8").replace('model = "qwen3:8b"', 'model = "haiku"'), "utf-8")
     with pytest.raises(ConfigError, match="haiku"):
@@ -302,14 +300,14 @@ def test_triage_extra_body_turns_off_deepseek_thinking(cfg):
     out, _ = run(r.triager.structured("邮件", SCHEMA, system="分级"))
     assert out["level"] == 3 and reqs[0]["thinking"] == {"type": "disabled"}
     assert reqs[0]["model"] == "deepseek-flash" and reqs[0]["response_format"] == {"type": "json_object"}
-    main = OpenAIChat(openai_cfg(c), db, transport=scripted([{"content": "好"}], reqs))
+    main = OpenAIChat(c, db, openai_backend(c), transport=scripted([{"content": "好"}], reqs))
     run(main.chat(model="m", messages=[]))
     assert "thinking" not in reqs[-1], "只作用于分级，不影响对话后端"
     good = p.read_text("utf-8")
     for a, b in (('extra_body = { thinking = { type = "disabled" } }', 'extra_body = "x"'),
                  ('backend = "openai"', 'backend = "codex_cli"')):
         p.write_text(good.replace(a, b, 1), "utf-8")
-        with pytest.raises(ConfigError, match="extra_body"):
+        with pytest.raises(ConfigError, match="extra_body|只用于 type = openai"):
             load_config(p)
 
 
@@ -329,7 +327,7 @@ def test_bark_minimal_content_hides_mail(cfg, monkeypatch):
 
 
 def test_card_for_deleted_record_is_marked_stale(cfg, db):
-    cfg.llm.research_backend = "claude_cli"
+    cfg.llm.research_backend = "claude"
     bind_owner(db)
     svc, bot = make_service(cfg, db)
     MailTools(cfg, db, "chat:main").request_research("查一下")

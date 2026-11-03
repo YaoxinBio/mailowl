@@ -1,6 +1,7 @@
-"""模型调用。默认后端：Mac mini 上已登录的 Claude Code CLI（claude -p）；另见 openai_compat.py。
+"""模型调用。后端在 [llm.backends.<名字>] 里定义，三个用途各指一个：
+Claude Code CLI（本文件）、OpenAI 兼容接口（openai_compat.py）、Codex CLI（codex_cli.py，不能做对话）。
 
-每个后端提供三个入口：
+后端的三个入口：
 - structured()：一次性结构化输出（邮件分级），无工具、不保存会话。
 - agent()：对话 Agent，按 scope（某封邮件 / 主对话）续接会话，只能用邮件工具，不能上网。
 - research()：独立的研究 Agent，只能上网，读不到邮箱；问题由对话 Agent 提出、用户在飞书上同意后才执行。
@@ -21,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .config import Config, lang_directive
+from .config import Backend, Config, lang_directive, resolve_claude_bin
 
 log = logging.getLogger(__name__)
 
@@ -54,10 +55,11 @@ class AgentResult:
 
 
 class ClaudeCLI:
-    def __init__(self, cfg: Config, *, triage_model: str | None = None):
+    def __init__(self, cfg: Config, backend: Backend | None = None):
         self.cfg = cfg
-        self.triage_model = triage_model or cfg.llm.triage_model
-        self.bin = cfg.llm.claude_bin
+        self.backend = backend or Backend(name="claude", type="claude_cli")
+        self.model = self.backend.model or "sonnet"
+        self.bin = resolve_claude_bin(self.backend.bin)
         self.workdir = cfg.agent_workdir
 
     def _env(self) -> dict[str, str]:
@@ -98,7 +100,7 @@ class ClaudeCLI:
 
     async def structured(self, prompt: str, schema: dict, *, system: str, model: str | None = None,
                          timeout: int | None = None) -> tuple[dict[str, Any], float]:
-        args = ["-p", "--output-format", "json", "--model", model or self.triage_model,
+        args = ["-p", "--output-format", "json", "--model", model or self.model,
                 "--tools", "", "--no-session-persistence", "--strict-mcp-config",
                 "--disable-slash-commands", "--setting-sources", "",
                 "--system-prompt", system, "--json-schema", json.dumps(schema, ensure_ascii=False)]
@@ -121,7 +123,7 @@ class ClaudeCLI:
 
     async def agent(self, prompt: str, *, scope: str, session_id: str | None, system: str,
                     model: str | None = None, timeout: int | None = None) -> AgentResult:
-        args = ["-p", "--output-format", "json", "--model", model or self.cfg.llm.agent_model,
+        args = ["-p", "--output-format", "json", "--model", model or self.model,
                 "--strict-mcp-config", "--mcp-config", self.mcp_config(scope),
                 "--disable-slash-commands", "--setting-sources", "",
                 "--system-prompt", system,
@@ -141,14 +143,10 @@ class ClaudeCLI:
         )
 
 
-    def research_default_model(self) -> str:
-        """research_model 没填：主后端也是 Claude 就跟对话同一个模型，否则（如对话用 DeepSeek）用 sonnet。"""
-        return self.cfg.llm.agent_model if self.cfg.llm.backend == "claude_cli" else "sonnet"
-
     async def research(self, question: str, *, timeout: int | None = None) -> str:
         """独立研究 Agent：只有 WebSearch/WebFetch，不挂 MCP（读不到邮箱），不保存会话。"""
         args = ["-p", "--output-format", "json",
-                "--model", self.cfg.llm.research_model or self.research_default_model(),
+                "--model", self.model,
                 "--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch", "WebFetch",
                 "--strict-mcp-config", "--no-session-persistence",
                 "--disable-slash-commands", "--setting-sources", "",
@@ -157,22 +155,13 @@ class ClaudeCLI:
         return str(data.get("result") or "").strip()
 
 
-def research_backend(cfg: Config) -> str | None:
-    """实际使用的研究后端；None 表示没有可用的联网方式。"""
-    rb = cfg.llm.research_backend
-    if rb == "none":
-        return None
-    if rb == "auto":
-        if cfg.llm.backend == "openai" and cfg.llm.tavily_api_key:
-            return "openai"
-        if Path(cfg.llm.claude_bin).expanduser().exists():
-            return "claude_cli"
-        return "openai" if cfg.llm.backend == "openai" else None
-    return rb
+def research_backend(cfg: Config) -> Backend | None:
+    """联网研究用的后端；None 表示关闭（research_backend = "none"）。"""
+    return cfg.llm.role("research")
 
 
 class LLMRouter:
-    """对话走主后端；分级可单独指定后端（如本地模型）；联网研究走研究后端。"""
+    """分级、对话、联网研究各走 [llm] 里指定的后端；同一个后端只建一个实例。"""
 
     def __init__(self, main, researcher=None, triager=None):
         self.main, self.researcher, self.triager = main, researcher, triager or main
@@ -185,37 +174,31 @@ class LLMRouter:
 
     async def research(self, question: str, **kw) -> str:
         if self.researcher is None:
-            raise LLMError("研究功能未配置（见 config.toml 的 [llm] research_backend）")
+            raise LLMError("联网研究已关闭（config.toml 的 [llm] research_backend = \"none\"）")
         return await self.researcher.research(question, **kw)
 
 
-def make_llm(cfg: Config, db) -> LLMRouter:
-    from .openai_compat import OpenAIChat
-    backends: dict[str, Any] = {}
-
-    def get(name: str):
-        if name not in backends:
-            if name == "claude_cli":
-                backends[name] = ClaudeCLI(cfg)
-            elif name == "codex_cli":                     # 只会是研究后端：Codex 没有邮件工具，不能做对话
-                from .codex_cli import CodexCLI
-                backends[name] = CodexCLI(cfg, model=cfg.llm.research_model or None)
-            else:
-                backends[name] = OpenAIChat(cfg, db)
-        return backends[name]
-
-    rb = research_backend(cfg)
-    t = cfg.llm.triage
-    triager = None
-    if t.get("backend") == "openai":
-        triager = OpenAIChat(cfg, db, base_url=t["base_url"], api_key=t.get("api_key", ""), triage_model=t["model"],
-                             extra_body=t.get("extra_body") or {})
-    elif t.get("backend") == "claude_cli":
-        triager = ClaudeCLI(cfg, triage_model=t.get("model"))
-    elif t.get("backend") == "codex_cli":
+def make_backend(cfg: Config, db, b: Backend):
+    if b.type == "claude_cli":
+        return ClaudeCLI(cfg, b)
+    if b.type == "codex_cli":
         from .codex_cli import CodexCLI
-        triager = CodexCLI(cfg)
-    return LLMRouter(get(cfg.llm.backend), get(rb) if rb else None, triager)
+        return CodexCLI(cfg, b)
+    from .openai_compat import OpenAIChat
+    return OpenAIChat(cfg, db, b)
+
+
+def make_llm(cfg: Config, db) -> LLMRouter:
+    made: dict[str, Any] = {}
+
+    def get(b: Backend | None):
+        if b is None:
+            return None
+        if b.name not in made:
+            made[b.name] = make_backend(cfg, db, b)
+        return made[b.name]
+
+    return LLMRouter(get(cfg.llm.role("agent")), get(cfg.llm.role("research")), get(cfg.llm.role("triage")))
 
 
 class FakeLLM:

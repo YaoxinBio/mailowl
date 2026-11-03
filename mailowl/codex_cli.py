@@ -26,7 +26,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .config import Config, lang_directive
+from .config import Backend, Config, lang_directive
 from .llm import RESEARCH_SYSTEM, LLMError
 from .openai_compat import conform, extract_json
 
@@ -41,12 +41,11 @@ def _sb_quote(p: Path) -> str:
 
 
 class CodexCLI:
-    def __init__(self, cfg: Config, *, model: str | None = None, effort: str | None = None, bin: str | None = None):
-        t = cfg.llm.triage if cfg.llm.triage.get("backend") == "codex_cli" else {}   # 没传就用 [llm.triage] 的设置
-        self.cfg = cfg
-        self.model = model or t.get("model")
-        self.effort = effort or t.get("effort") or "low"
-        self.bin_hint = bin or t.get("codex_bin")
+    def __init__(self, cfg: Config, backend: Backend):
+        self.cfg, self.backend = cfg, backend
+        self.model = backend.model or None               # 留空用 Codex 的默认模型
+        self.effort = backend.effort or "low"
+        self.bin_hint = backend.bin or None
         self.home = cfg.data_dir / "codex-home"          # 独立的 CODEX_HOME：没有 AGENTS.md
         self.work = cfg.data_dir / "codex-work"          # 每次调用的临时目录（schema、输出、空的工作目录）
         self.src_home = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()

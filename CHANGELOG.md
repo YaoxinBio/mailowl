@@ -2,10 +2,9 @@
 
 ## Unreleased
 
-- Web research can run on the Codex CLI (`research_backend = "codex_cli"`), using Codex's own web search under the same isolation as Codex triage: no mail tools, no access to MailOwl's config or data, no commands.
-- `[llm] extra_body` does the same for the main OpenAI-compatible backend, so chat and drafting can run on DeepSeek with thinking off (with thinking on, DeepSeek rejects tool calls unless the reasoning is passed back). When chat is not on Claude, Claude-based research defaults to sonnet instead of reusing the chat model name.
-- `[llm.triage] extra_body` passes vendor-specific request fields to an OpenAI-compatible triage model, e.g. `{ thinking = { type = "disabled" } }` to turn off DeepSeek's thinking mode. DeepSeek examples now use `deepseek-flash`.
-- Triage can run on the Codex CLI (`[llm.triage] backend = "codex_cli"`), using the ChatGPT plan on the host. Codex gets its own `CODEX_HOME` (so the user's `AGENTS.md` and config are not loaded) and, on macOS, an outer `sandbox-exec` profile: it cannot run commands or read MailOwl's config and data directories.
+- Pluggable model backends: define them under `[llm.backends.<name>]` (`type = "claude_cli" | "openai" | "codex_cli"`, each with its own model, URL, key and `extra_body`) and point `triage_backend`, `agent_backend` and `research_backend` at them. Switching a model is a one-line change. `mailowl check` checks every backend in use. The 0.1.0 `[llm]` / `[llm.triage]` format still loads and is translated.
+- Codex CLI backend for triage and web research, using the ChatGPT plan on the host. Codex gets its own `CODEX_HOME` (your `AGENTS.md` and config are not loaded) and, on macOS, an outer `sandbox-exec` profile: it cannot run commands or read MailOwl's config and data. It cannot be the chat backend (no mail tools); the config check says so.
+- `extra_body` passes vendor-specific request fields to an OpenAI-compatible backend, e.g. `{ thinking = { type = "disabled" } }`, which DeepSeek needs for tool calls. DeepSeek is verified for triage, chat and drafting; examples use `deepseek-flash`.
 - Digests are now logged: sent (with counts and the message id), skipped because nothing is new, or not sent because no chat user is paired.
 
 ## 0.1.0 — 2026-11-01

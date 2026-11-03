@@ -17,7 +17,7 @@ from typing import Any, Awaitable, Callable
 
 import httpx
 
-from .config import Config, lang_directive
+from .config import Backend, Config, lang_directive
 from .db import DB, now
 from .llm import RESEARCH_SYSTEM, AgentResult, LLMError, SessionMissing
 from .tools import MailTools
@@ -126,15 +126,12 @@ RESEARCH_TOOLS = [
 
 
 class OpenAIChat:
-    def __init__(self, cfg: Config, db: DB, transport: httpx.AsyncBaseTransport | None = None, *,
-                 base_url: str | None = None, api_key: str | None = None, triage_model: str | None = None,
-                 extra_body: dict[str, Any] | None = None):
-        self.cfg, self.db = cfg, db
-        self.base = (base_url or cfg.llm.base_url).rstrip("/")
-        self.api_key = cfg.llm.api_key if api_key is None else api_key
-        self.triage_model = triage_model or cfg.llm.triage_model
-        # 厂商特有的请求参数，如 DeepSeek 的 thinking；不覆盖下面的标准字段。没传就用 [llm] 的
-        self.extra_body = dict(cfg.llm.extra_body if extra_body is None else extra_body)
+    def __init__(self, cfg: Config, db: DB, backend: Backend, transport: httpx.AsyncBaseTransport | None = None):
+        self.cfg, self.db, self.backend = cfg, db, backend
+        self.base = backend.base_url.rstrip("/")
+        self.api_key = backend.api_key
+        self.model = backend.model
+        self.extra_body = dict(backend.extra_body)   # 厂商特有的请求参数，如 DeepSeek 的 thinking；不覆盖下面的标准字段
         self.transport = transport          # 测试用
 
     # ---------------------------------------------------------------- HTTP
@@ -217,7 +214,7 @@ class OpenAIChat:
                          timeout: int | None = None) -> tuple[dict[str, Any], float]:
         sys_prompt = (f"{system}\n\n只输出一个 JSON 对象（json），不要输出任何其他文字。"
                       f"它必须符合这个 JSON Schema：\n{json.dumps(schema, ensure_ascii=False)}")
-        msg = await self.chat(model=model or self.triage_model, json_mode=True, kind="triage",
+        msg = await self.chat(model=model or self.model, json_mode=True, kind="triage",
                               messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": prompt}],
                               timeout=timeout or self.cfg.llm.triage_timeout)
         return conform(extract_json(msg.get("content") or ""), schema), 0.0
@@ -240,7 +237,7 @@ class OpenAIChat:
         user = {"role": "user", "content": prompt}
         messages = [{"role": "system", "content": system}, *history, user]
         text, new, rounds = await self.tool_loop(messages, to_openai_tools(tools.specs()), run_tool,
-                                                 model=model or self.cfg.llm.agent_model,
+                                                 model=model or self.model,
                                                  timeout=timeout or self.cfg.llm.agent_timeout, kind="agent")
         kept = trim_history([*history, user, *new], self.cfg.llm.history_max_chars)
         self.db.x("INSERT INTO agent_history(session_id,scope,messages,updated_at) VALUES(?,?,?,?) "
@@ -267,6 +264,6 @@ class OpenAIChat:
         messages = [{"role": "system", "content": f"{RESEARCH_SYSTEM}\n{lang_directive(self.cfg)}"},
                     {"role": "user", "content": question}]
         text, _, _ = await self.tool_loop(messages, to_openai_tools(specs), run_tool,
-                                          model=self.cfg.llm.research_model or self.cfg.llm.agent_model,
+                                          model=self.model,
                                           timeout=timeout or self.cfg.llm.agent_timeout, kind="research")
         return text

@@ -556,7 +556,8 @@ class Service:
                    self.db.q("SELECT detail FROM actions WHERE kind='llm_cost' AND ts>=?", (day0,)))
         tokens = sum(json.loads(r["detail"]).get("tokens", 0) for r in
                      self.db.q("SELECT detail FROM actions WHERE kind='llm_tokens' AND ts>=?", (day0,)))
-        usage = f"模型花费（按 API 价折算）${cost:.3f}" if self.cfg.llm.backend == "claude_cli" else f"模型用量 {tokens} tokens"
+        usage = "；".join(([f"模型花费（按 API 价折算）${cost:.3f}"] if cost else [])        # Claude 按 API 价折算
+                         + ([f"模型用量 {tokens} tokens"] if tokens else [])) or "模型用量 0"   # OpenAI 兼容接口记 token
         out += [f"今日新邮件 {n_in} 封；分级队列 {self.triage_q.qsize()}；{usage}",
                 f"Bark：{'已配置' if self.bark.enabled else '未配置'}；数据目录 {self.cfg.data_dir}"]
         return out

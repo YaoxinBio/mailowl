@@ -8,6 +8,7 @@ CLI), or from --base-url/--model.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import datetime as dt
 import json
 import os
@@ -20,7 +21,7 @@ import tomllib
 from email.utils import formatdate
 from pathlib import Path
 
-from .config import ConfigError, ensure_dirs, load_config, resolve_config_path
+from .config import Backend, ConfigError, ensure_dirs, load_config, resolve_config_path
 from .db import DB
 from .feishu import FakeBot
 from .llm import make_llm
@@ -119,23 +120,41 @@ def _q(s: str) -> str:
     return json.dumps(s, ensure_ascii=False)
 
 
+def _toml(v) -> str:
+    if isinstance(v, dict):
+        return "{ " + ", ".join(f"{k} = {_toml(x)}" for k, x in v.items()) + " }"
+    return _q(v) if isinstance(v, str) else json.dumps(v)
+
+
 def _llm_section(base_url: str | None, model: str | None) -> tuple[str, str]:
-    """Return ([llm] lines for config.toml, [llm] lines for secrets.toml)."""
+    """Return (lines for the demo's [llm] table and its [llm.backends.*], text for secrets.toml)."""
     if base_url:
         if not model:
             raise ConfigError("--base-url needs --model")
-        return (f"backend = \"openai\"\nbase_url = {_q(base_url)}\ntriage_model = {_q(model)}\nagent_model = {_q(model)}\n",
-                f"api_key = {_q(os.environ.get('MAILOWL_LLM_API_KEY', ''))}\n")
-    path = resolve_config_path(None)
-    if path.exists():                                  # reuse the user's own model settings
-        raw = tomllib.loads(path.read_text("utf-8")).get("llm", {})
-        sec = path.with_name("secrets.toml")
-        key = tomllib.loads(sec.read_text("utf-8")).get("llm", {}).get("api_key", "") if sec.exists() else ""
-        keep = {k: v for k, v in raw.items() if k in ("backend", "claude_bin", "base_url", "triage_model", "agent_model")}
-        if model:
-            keep.update(triage_model=model, agent_model=model)
-        return "".join(f"{k} = {_q(v)}\n" for k, v in keep.items()), f"api_key = {_q(key)}\n"
-    return f"triage_model = {_q(model or 'sonnet')}\nagent_model = {_q(model or 'sonnet')}\n", ""
+        backends = [Backend(name="demo", type="openai", base_url=base_url, model=model,
+                            api_key=os.environ.get("MAILOWL_LLM_API_KEY", ""))]
+    else:
+        user = None
+        if resolve_config_path(None).exists():          # reuse the user's own model settings
+            try:
+                user = load_config(None).llm
+            except ConfigError:
+                user = None
+        if user:
+            backends = [user.role("triage"), user.role("agent")]
+            if model:
+                backends = [dataclasses.replace(b, model=model) for b in backends]
+        else:
+            backends = [Backend(name="claude", type="claude_cli", model=model or "sonnet")]
+    conf = f"triage_backend = {_q(backends[0].name)}\nagent_backend = {_q(backends[-1].name)}\n"
+    sec = ""
+    for b in {b.name: b for b in backends}.values():
+        fields = {"type": b.type, "model": b.model, "base_url": b.base_url, "extra_body": b.extra_body,
+                  "bin": b.bin, "effort": b.effort}
+        conf += f"\n[llm.backends.{_q(b.name)}]\n" + "".join(f"{k} = {_toml(v)}\n" for k, v in fields.items() if v)
+        if b.api_key:
+            sec += f"[llm.backends.{_q(b.name)}]\napi_key = {_q(b.api_key)}\n"
+    return conf, sec
 
 
 def _write_config(root: Path, lang: str, llm_cfg: str, llm_sec: str) -> Path:
@@ -165,7 +184,7 @@ def _write_config(root: Path, lang: str, llm_cfg: str, llm_sec: str) -> Path:
         affiliation_en = {_q(P['affiliation_en'])}
     """), "utf-8")
     sec = conf / "secrets.toml"
-    sec.write_text(f"[llm]\n{llm_sec}" if llm_sec else "", "utf-8")
+    sec.write_text(llm_sec, "utf-8")
     sec.chmod(0o600)
     return conf / "config.toml"
 
@@ -257,15 +276,16 @@ async def run_demo(base_url: str | None = None, model: str | None = None, keep: 
     try:
         cfg = load_config(_write_config(root, lang, *_llm_section(base_url, model)))
         ensure_dirs(cfg)
-        if llm is None and cfg.llm.backend == "claude_cli" and not Path(cfg.llm.claude_bin).exists():
-            print(f"Claude Code CLI not found ({cfg.llm.claude_bin}). Install and log in to Claude Code, or use a "
+        agent = cfg.llm.role("agent")
+        if llm is None and agent.type == "claude_cli" and not Path(agent.bin).exists():
+            print(f"Claude Code CLI not found ({agent.bin}). Install and log in to Claude Code, or use a "
                   "local/hosted model: mailowl demo --base-url http://127.0.0.1:11434/v1 --model <name>")
             return 2
         db = DB(cfg.db_path)
         ids = _seed(db, lang, cfg.accounts[0].address)
         llm = llm or make_llm(cfg, db)
-        backend = cfg.llm.backend + ("" if cfg.llm.backend == "claude_cli" else f" · {cfg.llm.base_url}")
-        print(bold("\n🦉 MailOwl demo  ") + dim(L["banner"].format(model=cfg.llm.agent_model, backend=backend)) + "\n")
+        backend = agent.type + (f" · {agent.base_url}" if agent.type == "openai" else "")
+        print(bold("\n🦉 MailOwl demo  ") + dim(L["banner"].format(model=agent.model or "default", backend=backend)) + "\n")
 
         print(bold(L["step1"]))
         t0 = time.time()

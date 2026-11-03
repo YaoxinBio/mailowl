@@ -93,7 +93,7 @@ Every item below is optional — mix and match.
 
 | What leaves your Mac | Default | Most private setting |
 |---|---|---|
-| Mail text sent to a model | every new message (for triage) and the ones you chat about | `[llm.triage]` pointing at a local Ollama model: triage never sends mail to a model vendor. Point the main backend at a local model too and nothing does. |
+| Mail text sent to a model | every new message (for triage) and the ones you chat about | `triage_backend` pointing at a local Ollama model: triage never sends mail to a model vendor. Point `agent_backend` at a local model too and nothing does. |
 | Chat app (Feishu / Lark) | sender, subject and summary; the body only on request | `body_in_feishu = "never"` |
 | Phone alerts (Bark) | subject and summary | `[bark] content = "minimal"` — alerts say only that something needs attention |
 | Web research | only the questions you approve | `research_backend = "none"` |
@@ -124,12 +124,14 @@ For step-by-step configuration (mailbox app passwords, Feishu/Lark bot setup, an
 
 ## Models
 
-| Backend | Configure | Notes |
+Define backends under `[llm.backends.<name>]` and point `triage_backend`, `agent_backend` and `research_backend` at them; switching the model for one of them is a one-line change (see the [setup guide](docs/SETUP.en.md#5-other-models-optional)).
+
+| Backend `type` | Used for | Notes |
 |---|---|---|
-| **Claude Code CLI** (default) | `backend = "claude_cli"` | Reuses the Claude Code CLI session already logged in on the host |
-| **OpenAI-compatible** | `backend = "openai"`, `base_url`, `api_key` | DeepSeek, Qwen, Kimi, OpenAI, Grok, OpenRouter, etc. (requires function calling) |
-| **Local model (Ollama, LM Studio …)** | `backend = "openai"`, `base_url = "http://127.0.0.1:11434/v1"` | mail text never leaves your Mac for inference; tested with a 27B Qwen model |
-| **Codex CLI** (triage only) | `[llm.triage]` `backend = "codex_cli"` | uses the ChatGPT plan logged in on the host; isolated from your Codex config; on macOS also sandboxed so it cannot run commands |
+| **`claude_cli`** (default) | triage, chat & drafting, web research | Reuses the Claude Code CLI session already logged in on the host |
+| **`openai`** | triage, chat & drafting, web research (search needs a Tavily key) | DeepSeek, Qwen, Kimi, OpenAI, Grok, OpenRouter, etc. (chat requires function calling) |
+| **`openai` with a local model** (Ollama, LM Studio …) | same as above | `base_url = "http://127.0.0.1:11434/v1"`; mail text never leaves your Mac for inference; tested with a 27B Qwen model |
+| **`codex_cli`** | triage, web research | uses the ChatGPT plan logged in on the host; isolated from your Codex config; on macOS also sandboxed so it cannot run commands |
 
 ## Status
 

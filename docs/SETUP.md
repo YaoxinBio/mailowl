@@ -75,64 +75,68 @@ mailowl service status                  # 运行状态；restart / logs / uninst
 
 ## 5. 换用其他模型（可选）
 
-默认用运行机上已登录的 Claude Code。也可以换成任何 OpenAI 兼容接口（DeepSeek、通义千问、Kimi、智谱、OpenAI、OpenRouter、本地 Ollama）：
+MailOwl 的模型调用分三个用途：**分级**（每封新邮件）、**对话起草**（飞书里聊天、写回信）、**联网研究**（你同意后才上网查）。先在 `[llm.backends.<名字>]` 里定义要用的后端，再给每个用途指一个名字：
 
 ```toml
 # config.toml
 [llm]
-backend = "openai"
+triage_backend = "deepseek"
+agent_backend = "deepseek"
+research_backend = "codex"         # "none" 关闭联网研究
+
+[llm.backends.deepseek]
+type = "openai"
 base_url = "https://api.deepseek.com/v1"
-triage_model = "deepseek-flash"
-agent_model = "deepseek-flash"
+model = "deepseek-flash"
 extra_body = { thinking = { type = "disabled" } }   # DeepSeek 必须关思考：开着思考调用工具会报 400
+
+[llm.backends.claude]
+type = "claude_cli"
+model = "sonnet"
+
+[llm.backends.codex]
+type = "codex_cli"
+model = "gpt-6.1-sol"      # 不写就用 Codex 的默认模型
+effort = "low"             # 推理强度
 ```
 
 ```toml
 # secrets.toml
-[llm]
+[llm.backends.deepseek]
 api_key = "sk-..."
 ```
 
-`extra_body` 会原样并进每次请求，用来传各家特有的参数。改完运行 `mailowl check`，会实际调用一次模型确认能通。联网查资料仍由本机的 Claude Code 完成（没填 `research_model` 时用 sonnet），也可以配 Tavily 改走同一个接口，或者设 `research_backend = "codex_cli"` 交给本机已登录的 Codex（原生搜索，同样套着下面说的隔离和沙箱，每次约 20–40 秒）。
+换模型只改 `[llm]` 里对应的一行，比如 Claude 额度用完时把三个都指向 `deepseek`，恢复后再改回 `claude`；暂时不用的后端可以留着。改完运行 `mailowl check`：每个用到的后端都会检查一遍，OpenAI 兼容接口会真调一次。
 
+| type | 分级 | 对话起草 | 联网研究 | 说明 |
+|---|---|---|---|---|
+| `claude_cli` | ✓ | ✓ | ✓ | 本机已登录的 Claude Code；model 写 haiku / sonnet / opus |
+| `openai` | ✓ | ✓ | ✓（配了 Tavily 才能搜索，否则只能打开网址） | DeepSeek、通义千问、Kimi、智谱、OpenAI、OpenRouter、本地 Ollama 等；做对话要选支持 function calling 的模型 |
+| `codex_cli` | ✓ | — | ✓（Codex 自带的搜索） | 本机已登录的 Codex CLI（`codex login`，ChatGPT 订阅）；没有邮件工具，不能做对话 |
+
+`extra_body` 会原样并进 openai 类型后端的每次请求，用来传各家特有的参数。Tavily 的密钥写在 secrets.toml 的 `[llm]` `tavily_api_key`。
 
 只想让分级在本地完成（每封新邮件都不交给模型厂商），对话起草仍用 Claude：
 
 ```toml
 # config.toml
-[llm.triage]
-backend = "openai"
+[llm]
+triage_backend = "local"
+agent_backend = "claude"
+research_backend = "claude"
+
+[llm.backends.local]
+type = "openai"
 base_url = "http://127.0.0.1:11434/v1"   # 本地 Ollama
 model = "qwen3:8b"
+
+[llm.backends.claude]
+type = "claude_cli"
 ```
 
-只把分级交给 DeepSeek（便宜，国内直连），对话起草仍用 Claude。DeepSeek 默认开着「思考」，分级用不着、还会变慢，用 `extra_body` 关掉——它会原样并进请求体，其他厂商的特有参数也可以这样传：
+MailOwl 给 Codex 单独建一个 `CODEX_HOME`（只软链接 `auth.json`），不读你的 `~/.codex/config.toml` 和 `AGENTS.md`；macOS 上外面再套一层沙箱，Codex 执行不了任何命令，也读不到 MailOwl 的配置和数据目录。每次调用约 20–40 秒（主要是 CLI 启动开销），经代理约 5–6 MB 流量。
 
-```toml
-# config.toml
-[llm.triage]
-backend = "openai"
-base_url = "https://api.deepseek.com/v1"
-model = "deepseek-flash"
-extra_body = { thinking = { type = "disabled" } }
-```
-
-```toml
-# secrets.toml
-[llm.triage]
-api_key = "sk-..."
-```
-
-也可以让分级走本机已登录的 Codex CLI（`codex login`），用 ChatGPT 订阅额度，适合 Claude 额度紧张时分担：
-
-```toml
-[llm.triage]
-backend = "codex_cli"
-model = "gpt-6.1-sol"      # 不写就用 Codex 的默认模型
-effort = "low"             # 推理强度；分级用 low 足够
-```
-
-MailOwl 给 Codex 单独建一个 `CODEX_HOME`（只软链接 `auth.json`），不读你的 `~/.codex/config.toml` 和 `AGENTS.md`；macOS 上外面再套一层沙箱，Codex 执行不了任何命令，也读不到 MailOwl 的配置和数据目录。每封邮件约 20–30 秒（主要是 CLI 启动开销），经代理约 5–6 MB 流量。
+0.1.0 的旧写法（`[llm] backend`、`triage_model` / `agent_model`、`research_backend = "auto"`、`[llm.triage]` 表）照旧能加载，会自动换算成命名后端；两种写法不能混用。
 
 其他隐私开关见 README 的「隐私模式」：`body_in_feishu = "never"`、`[bark] content = "minimal"`、`research_backend = "none"`。
 

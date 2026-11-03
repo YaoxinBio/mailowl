@@ -93,7 +93,7 @@ MailOwl 默认把所有外来邮件视为不可信输入，用代码边界而非
 
 | 会离开本机的内容 | 默认 | 最私密的设置 |
 |---|---|---|
-| 发给模型的邮件内容 | 每封新邮件（分级）以及你主动询问的邮件 | 用 `[llm.triage]` 把分级指向本地 Ollama 模型：分级时不会把任何邮件交给模型厂商；主模型也换成本地的，就完全不出本机 |
+| 发给模型的邮件内容 | 每封新邮件（分级）以及你主动询问的邮件 | 把 `triage_backend` 指向本地 Ollama 模型：分级时不会把任何邮件交给模型厂商；`agent_backend` 也换成本地的，就完全不出本机 |
 | 聊天软件（飞书 / Lark） | 发件人、主题和摘要；正文只在你要求时发送 | `body_in_feishu = "never"` |
 | 手机提醒（Bark） | 主题和摘要 | `[bark] content = "minimal"`：只提示「有新提醒」 |
 | 联网研究 | 只有你批准过的问题 | `research_backend = "none"` |
@@ -124,12 +124,14 @@ mailowl service install   # 装成后台服务（登录后自动启动，崩溃�
 
 ## 模型
 
-| 后端 | 配置 | 说明 |
+在 `[llm.backends.<名字>]` 里定义后端，再用 `triage_backend`、`agent_backend`、`research_backend` 给分级、对话起草、联网研究各指一个；换其中一个的模型只改一行（见[安装文档](docs/SETUP.md#5-换用其他模型可选)）。
+
+| 后端 `type` | 能做什么 | 说明 |
 |---|---|---|
-| **Claude Code CLI**（默认） | `backend = "claude_cli"` | 直接复用宿主机上已登录的 Claude Code CLI |
-| **OpenAI 兼容接口** | `backend = "openai"`、`base_url`、`api_key` | 支持 DeepSeek、通义千问、Kimi、OpenAI、Grok、OpenRouter 等（模型需支持工具调用） |
-| **本地模型（Ollama、LM Studio 等）** | `backend = "openai"`、`base_url = "http://127.0.0.1:11434/v1"` | 邮件内容不出本机；已用 27B 的 Qwen 实测 |
-| **Codex CLI**（仅分级） | `[llm.triage]` `backend = "codex_cli"` | 用宿主机上已登录的 ChatGPT 订阅；与你自己的 Codex 配置隔离；在 macOS 上还会放进沙箱，执行不了任何命令 |
+| **`claude_cli`**（默认） | 分级、对话起草、联网研究 | 直接复用宿主机上已登录的 Claude Code CLI |
+| **`openai`** | 分级、对话起草、联网研究（搜索要配 Tavily） | 支持 DeepSeek、通义千问、Kimi、OpenAI、Grok、OpenRouter 等（对话需要模型支持工具调用） |
+| **`openai` + 本地模型**（Ollama、LM Studio 等） | 同上 | `base_url = "http://127.0.0.1:11434/v1"`；邮件内容不出本机；已用 27B 的 Qwen 实测 |
+| **`codex_cli`** | 分级、联网研究 | 用宿主机上已登录的 ChatGPT 订阅；与你自己的 Codex 配置隔离；在 macOS 上还会放进沙箱，执行不了任何命令 |
 
 ## 现状
 

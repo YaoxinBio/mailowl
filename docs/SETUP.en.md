@@ -75,64 +75,68 @@ If you develop on another machine, `deploy/deploy.sh --restart [host]` rsyncs th
 
 ## 5. Other models (optional)
 
-The default is the Claude Code CLI logged in on the host. Any OpenAI-compatible API works as well (DeepSeek, Qwen, Kimi, Zhipu, OpenAI, Grok, OpenRouter, local Ollama):
+MailOwl uses a model for three things: **triage** (every new message), **chat and drafting** (talking in Feishu, writing replies) and **web research** (only after you approve a question). Define the backends you want under `[llm.backends.<name>]`, then point each use at one of them:
 
 ```toml
 # config.toml
 [llm]
-backend = "openai"
+triage_backend = "deepseek"
+agent_backend = "deepseek"
+research_backend = "codex"         # "none" turns web research off
+
+[llm.backends.deepseek]
+type = "openai"
 base_url = "https://api.deepseek.com/v1"
-triage_model = "deepseek-flash"
-agent_model = "deepseek-flash"
+model = "deepseek-flash"
 extra_body = { thinking = { type = "disabled" } }   # required for DeepSeek: tool calls with thinking on fail with HTTP 400
+
+[llm.backends.claude]
+type = "claude_cli"
+model = "sonnet"
+
+[llm.backends.codex]
+type = "codex_cli"
+model = "gpt-6.1-sol"      # omit to use Codex's default model
+effort = "low"             # reasoning effort
 ```
 
 ```toml
 # secrets.toml
-[llm]
+[llm.backends.deepseek]
 api_key = "sk-..."
 ```
 
-`extra_body` is merged into every request as-is, for vendor-specific parameters. Run `mailowl check` afterwards; it makes one real call to confirm the model works. Web research still runs on the local Claude Code (sonnet unless `research_model` is set), on the same API if you add a Tavily key, or on the Codex CLI logged in on the host with `research_backend = "codex_cli"` (its own web search, with the isolation and sandbox described below; about 20–40 s per question). The chat agent calls tools, so pick a model with function calling (pure reasoning models will not work).
+Switching a model is a one-line change in `[llm]` — for example, point all three at `deepseek` while your Claude usage is used up and back at `claude` afterwards. Backends you are not using can stay defined. Run `mailowl check` afterwards: it checks every backend in use and makes one real call to each OpenAI-compatible one.
 
+| type | Triage | Chat & drafting | Web research | Notes |
+|---|---|---|---|---|
+| `claude_cli` | ✓ | ✓ | ✓ | the Claude Code CLI logged in on the host; model is haiku / sonnet / opus |
+| `openai` | ✓ | ✓ | ✓ (searching needs a Tavily key; otherwise it can only open URLs) | DeepSeek, Qwen, Kimi, Zhipu, OpenAI, Grok, OpenRouter, local Ollama, …; chat needs a model with function calling |
+| `codex_cli` | ✓ | — | ✓ (Codex's own web search) | the Codex CLI logged in on the host (`codex login`, ChatGPT plan); it has no mail tools, so it cannot chat |
+
+`extra_body` is merged into every request of an `openai` backend, for vendor-specific parameters. The Tavily key goes in secrets.toml as `[llm]` `tavily_api_key`.
 
 To keep triage on your machine (no new message is sent to a model vendor) while drafting still uses Claude:
 
 ```toml
 # config.toml
-[llm.triage]
-backend = "openai"
+[llm]
+triage_backend = "local"
+agent_backend = "claude"
+research_backend = "claude"
+
+[llm.backends.local]
+type = "openai"
 base_url = "http://127.0.0.1:11434/v1"   # local Ollama
 model = "qwen3:8b"
+
+[llm.backends.claude]
+type = "claude_cli"
 ```
 
-To send only triage to DeepSeek (cheap; reachable directly from mainland China) while drafting stays on Claude: DeepSeek has "thinking" on by default, which triage does not need and which makes it slower, so turn it off with `extra_body`. It is merged into the request body as-is, so other vendors' own parameters can be passed the same way:
+MailOwl gives Codex its own `CODEX_HOME` (only `auth.json` is symlinked), so your `~/.codex/config.toml` and `AGENTS.md` are not loaded. On macOS it also wraps Codex in an outer sandbox: Codex cannot run any command and cannot read MailOwl's config or data directories. Each call takes about 20–40 s, mostly CLI start-up, and about 5–6 MB of traffic.
 
-```toml
-# config.toml
-[llm.triage]
-backend = "openai"
-base_url = "https://api.deepseek.com/v1"
-model = "deepseek-flash"
-extra_body = { thinking = { type = "disabled" } }
-```
-
-```toml
-# secrets.toml
-[llm.triage]
-api_key = "sk-..."
-```
-
-Triage can also run on the Codex CLI logged in on the host (`codex login`), using your ChatGPT plan — handy when Claude usage is tight:
-
-```toml
-[llm.triage]
-backend = "codex_cli"
-model = "gpt-6.1-sol"      # omit to use Codex's default model
-effort = "low"             # reasoning effort; low is enough for triage
-```
-
-MailOwl gives Codex its own `CODEX_HOME` (only `auth.json` is symlinked), so your `~/.codex/config.toml` and `AGENTS.md` are not loaded. On macOS it also wraps Codex in an outer sandbox: Codex cannot run any command and cannot read MailOwl's config or data directories. Each message takes about 20–30 s, mostly CLI start-up, and about 5–6 MB of traffic.
+The 0.1.0 format (`[llm] backend`, `triage_model` / `agent_model`, `research_backend = "auto"`, the `[llm.triage]` table) still loads and is translated into named backends; the two formats cannot be mixed.
 
 Other privacy switches are listed under "Privacy mode" in the README: `body_in_feishu = "never"`, `[bark] content = "minimal"`, `research_backend = "none"`.
 

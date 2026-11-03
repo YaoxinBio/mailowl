@@ -27,8 +27,9 @@ def _target() -> str:
 
 
 def build_plist(cfg: Config) -> dict:
-    path_dirs = [str(Path(cfg.llm.claude_bin).expanduser().parent), str(Path.home() / ".local" / "bin"),
-                 "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+    bins = [str(Path(b.bin).expanduser().parent) for b in cfg.llm.backends.values() if b.bin]
+    path_dirs = list(dict.fromkeys([*bins, str(Path.home() / ".local" / "bin"),
+                                    "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]))
     return {
         "Label": LABEL,
         "ProgramArguments": [sys.executable, "-m", "mailowl", "--config", str(cfg.path), "run"],

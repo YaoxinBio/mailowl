@@ -55,6 +55,52 @@ def cmd_init(args) -> int:
     return 0
 
 
+def check_models(cfg, report) -> None:
+    """每个实际用到的后端检查一次：Claude/Codex 看版本和登录，OpenAI 兼容接口真调一次。"""
+    import subprocess
+    from .config import ROLES
+    from .db import DB
+    from .llm import ClaudeCLI
+    used: dict[str, list[str]] = {}
+    for role, label in ROLES.items():
+        b = cfg.llm.role(role)
+        if b is not None:
+            used.setdefault(b.name, []).append(label)
+    for name, labels in used.items():
+        b = cfg.llm.backends[name]
+        tag = f"{'、'.join(labels)}：{name}"
+        try:
+            if b.type == "claude_cli":
+                out = subprocess.run([ClaudeCLI(cfg, b).bin, "--version"], capture_output=True, text=True, timeout=30)
+                report(f"{tag}（Claude CLI {b.model}）", out.returncode == 0, out.stdout.strip() or out.stderr.strip()[:200])
+            elif b.type == "openai":
+                from .openai_compat import OpenAIChat
+                msg = asyncio.run(OpenAIChat(cfg, DB(cfg.db_path), b).chat(
+                    model=b.model, messages=[{"role": "user", "content": "只回复 ok"}], timeout=120, kind="check"))
+                report(f"{tag}（{b.model}）", True, f"{b.base_url} → {(msg.get('content') or '').strip()[:20]}")
+            else:
+                from .codex_cli import CodexCLI
+                cx = CodexCLI(cfg, b)
+                cx.prepare()
+                ver = subprocess.run([cx.bin, "--version"], capture_output=True, text=True, timeout=30, env=cx._env())
+                st = subprocess.run([cx.bin, "login", "status"], capture_output=True, text=True, timeout=30, env=cx._env())
+                status = (st.stdout or st.stderr).strip().splitlines()[-1:] or ["?"]
+                report(f"{tag}（Codex {b.model or '默认模型'}）", ver.returncode == 0 and st.returncode == 0,
+                       f"{ver.stdout.strip()}，{status[0]}")
+                report("Codex 登录凭据共用", cx.auth_linked(),
+                       f"{cx.home / 'auth.json'} → {cx.src_home / 'auth.json'}" if cx.auth_linked() else
+                       f"{cx.home / 'auth.json'} 已不是软链接，与本机 Codex 的登录可能分叉：删掉它再运行 check 即可重建")
+                report("Codex 外层沙箱", cx.outer_sandbox, "sandbox-exec：不能执行命令、读不到 MailOwl 的配置和数据"
+                       if cx.outer_sandbox else "非 macOS：只有 Codex 自带的只读沙箱")
+        except Exception as e:
+            report(tag, False, str(e)[:300])
+    rb = cfg.llm.role("research")
+    if rb is None:
+        print('➖ 联网研究：已关闭（research_backend = "none"），Agent 不能上网查资料')
+    elif rb.type == "openai" and not cfg.llm.tavily_api_key:
+        print("⚠️ 联网研究：没配 Tavily（secrets.toml 的 [llm] tavily_api_key），只能打开网址、不能搜索")
+
+
 def cmd_check(args) -> int:
     import httpx
     from .fetch import IMAPSync, POP3Sync
@@ -103,58 +149,7 @@ def cmd_check(args) -> int:
                 report(f"{a.name} SMTP 登录", False, f"{type(e).__name__}: {e}")
         else:
             print(f"➖ {a.name} 未配置 SMTP（只收不发）")
-    from .llm import research_backend
-    if cfg.llm.backend == "claude_cli" or research_backend(cfg) == "claude_cli":
-        try:
-            out = subprocess.run([cfg.llm.claude_bin, "--version"], capture_output=True, text=True, timeout=30)
-            report("Claude CLI", out.returncode == 0, out.stdout.strip() or out.stderr.strip()[:200])
-        except Exception as e:
-            report("Claude CLI", False, str(e))
-    if cfg.llm.backend == "openai":
-        from .db import DB
-        from .openai_compat import OpenAIChat
-        for role in ("triage_model", "agent_model"):
-            model = getattr(cfg.llm, role)
-            try:
-                msg = asyncio.run(OpenAIChat(cfg, DB(cfg.db_path)).chat(
-                    model=model, messages=[{"role": "user", "content": "只回复 ok"}], timeout=60, kind="check"))
-                report(f"模型接口 {model}", True, f"{cfg.llm.base_url} → {(msg.get('content') or '').strip()[:20]}")
-            except Exception as e:
-                report(f"模型接口 {model}", False, str(e)[:300])
-    t = cfg.llm.triage
-    if t.get("backend") == "openai":
-        from .db import DB
-        from .openai_compat import OpenAIChat
-        try:
-            msg = asyncio.run(OpenAIChat(cfg, DB(cfg.db_path), base_url=t["base_url"], api_key=t.get("api_key", ""),
-                                         extra_body=t.get("extra_body") or {}).chat(
-                model=t["model"], messages=[{"role": "user", "content": "只回复 ok"}], timeout=120, kind="check"))
-            report(f"分级模型 {t['model']}", True, f"{t['base_url']} → {(msg.get('content') or '').strip()[:20]}")
-        except Exception as e:
-            report(f"分级模型 {t['model']}", False, str(e)[:300])
-    rb = research_backend(cfg)
-    if t.get("backend") == "codex_cli" or rb == "codex_cli":
-        from .codex_cli import CodexCLI
-        cx = CodexCLI(cfg) if t.get("backend") == "codex_cli" else CodexCLI(cfg, model=cfg.llm.research_model or None)
-        use = "、".join(x for x, on in (("分级", t.get("backend") == "codex_cli"), ("联网研究", rb == "codex_cli")) if on)
-        try:
-            cx.prepare()
-            ver = subprocess.run([cx.bin, "--version"], capture_output=True, text=True, timeout=30, env=cx._env())
-            st = subprocess.run([cx.bin, "login", "status"], capture_output=True, text=True, timeout=30, env=cx._env())
-            status = (st.stdout or st.stderr).strip().splitlines()[-1:] or ["?"]
-            report(f"{use}：Codex {cx.model or '（默认模型）'}", ver.returncode == 0 and st.returncode == 0,
-                   f"{ver.stdout.strip()}，{status[0]}")
-            report("Codex 登录凭据共用", cx.auth_linked(),
-                   f"{cx.home / 'auth.json'} → {cx.src_home / 'auth.json'}" if cx.auth_linked() else
-                   f"{cx.home / 'auth.json'} 已不是软链接，与本机 Codex 的登录可能分叉：删掉它再运行 check 即可重建")
-            report("Codex 外层沙箱", cx.outer_sandbox, "sandbox-exec：不能执行命令、读不到 MailOwl 的配置和数据"
-                   if cx.outer_sandbox else "非 macOS：只有 Codex 自带的只读沙箱")
-        except Exception as e:
-            report(f"{use}：Codex", False, str(e)[:300])
-    hint = {"claude_cli": "Claude CLI（WebSearch / WebFetch）", "codex_cli": "Codex CLI（原生 web_search，外层沙箱）",
-            "openai": "OpenAI 兼容接口 + " + ("Tavily 搜索" if cfg.llm.tavily_api_key else "只能打开网址（没配 Tavily，不能搜索）"),
-            None: "未配置：Agent 不能上网查资料"}[rb]
-    print(f"{'✅' if rb else '➖'} 联网研究：{hint}")
+    check_models(cfg, report)
     if cfg.feishu.app_id and cfg.feishu.app_secret:
         try:
             r = httpx.post(cfg.feishu.domain.rstrip("/") + "/open-apis/auth/v3/tenant_access_token/internal",

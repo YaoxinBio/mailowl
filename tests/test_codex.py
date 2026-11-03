@@ -19,6 +19,11 @@ def with_codex_triage(cfg, extra=""):
     return load_config(p)
 
 
+def codex(cfg):
+    c = with_codex_triage(cfg)
+    return CodexCLI(c, c.llm.role("triage"))
+
+
 class FakeProc:
     def __init__(self, rc=0, err=b""):
         self.returncode, self.err, self.stdin = rc, err, None
@@ -71,7 +76,7 @@ def test_codex_structured_is_isolated(cfg, tmp_path, monkeypatch):
     monkeypatch.setattr(codex_cli.asyncio, "create_subprocess_exec", fake_exec(calls, output=json.dumps(
         {"level": "5", "category": "newsletter", "summary": "周报", "analysis": "无需处理", "deadline": None,
          "needs_reply": "false", "action_items": [], "tags": []})))
-    cx = CodexCLI(with_codex_triage(cfg))
+    cx = codex(cfg)
     out, cost = run(cx.structured("邮件正文", SCHEMA, system="分级规则"))
     assert out["level"] == 3 and out["needs_reply"] is False and cost == 0.0     # 按 schema 纠正
     args, kw, proc = calls[-1]
@@ -95,7 +100,7 @@ def test_codex_wrapped_in_outer_sandbox_on_macos(cfg, tmp_path, monkeypatch):
     sb.write_text("")
     monkeypatch.setattr(codex_cli, "SANDBOX_EXEC", str(sb))
     monkeypatch.setattr(codex_cli.sys, "platform", "darwin")
-    cx = CodexCLI(with_codex_triage(cfg))
+    cx = codex(cfg)
     args = cx.command(tmp_path, tmp_path / "s.json", tmp_path / "o.json", None)
     assert args[0] == str(sb) and args[1] == "-p" and args[3] == cx.bin
     prof = args[2]
@@ -113,7 +118,7 @@ def test_codex_failure_raises_with_stderr(cfg, monkeypatch):
     calls = []
     monkeypatch.setattr(codex_cli.asyncio, "create_subprocess_exec",
                         fake_exec(calls, rc=1, err=b"You've hit your usage limit."))
-    cx = CodexCLI(with_codex_triage(cfg))
+    cx = codex(cfg)
     with pytest.raises(LLMError, match="usage limit"):
         run(cx.structured("x", SCHEMA, system="s"))
 
