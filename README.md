@@ -143,7 +143,7 @@ MailOwl is in an early stage. The core workflow is **verified end-to-end on real
 
 **Not yet implemented or verified:**
 
-- The OpenAI-compatible backend is verified with a local Ollama model, and with DeepSeek for triage only; chat and drafting on hosted APIs (DeepSeek, OpenAI, …) have not been tested live yet, and web search via Tavily is unverified.
+- The OpenAI-compatible backend is verified with a local Ollama model and with DeepSeek (triage, chat and drafting); other hosted APIs (OpenAI, Qwen, …) have not been tested live yet, and web search via Tavily is unverified.
 - macOS only (`launchd`); no Linux or Docker packaging yet.
 - Mailboxes must support app-password login: Outlook/Hotmail (OAuth-only) are not supported directly — auto-forward them to a supported mailbox as a workaround (see the setup guide). Gmail works via app password, with no OAuth support yet.
 - The chat interface is Feishu/Lark only, and Lark (international) has not been tested.
