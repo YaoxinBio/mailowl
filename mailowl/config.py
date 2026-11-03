@@ -86,8 +86,8 @@ class LLMConfig:
     # extra_body = { thinking = { type = "disabled" } }（开着思考调用工具，要把思考内容逐轮传回，否则 400）
     extra_body: dict = field(default_factory=dict)
     # 上网查资料由独立的研究 Agent 完成：它读不到邮箱，每次都要用户在飞书卡片上同意
-    research_backend: str = "auto"    # auto | claude_cli | openai | none
-    research_model: str = ""          # 留空用 agent_model
+    research_backend: str = "auto"    # auto | claude_cli | openai | codex_cli | none
+    research_model: str = ""          # 留空：claude_cli 同 agent_model（对话不用 Claude 时为 sonnet），codex_cli 用 Codex 默认模型
     tavily_api_key: str = ""          # openai 研究后端的搜索接口（tavily.com），写在 secrets.toml 的 [llm]
     agent_web: bool = False           # 已废弃：对话 Agent 不再直接上网，保留只为兼容旧配置
     # 可选：分级单独用另一个模型，例如本地 Ollama，让每封新邮件都不交给模型厂商；对话起草仍用上面的设置。
@@ -291,8 +291,11 @@ def load_config(path: str | os.PathLike | None = None) -> Config:
         cfg.profile = ""
     if cfg.llm.backend not in ("claude_cli", "openai"):
         raise ConfigError("[llm] backend 只能是 claude_cli 或 openai")
-    if cfg.llm.research_backend not in ("auto", "claude_cli", "openai", "none"):
-        raise ConfigError("[llm] research_backend 只能是 auto / claude_cli / openai / none")
+    if cfg.llm.research_backend not in ("auto", "claude_cli", "openai", "codex_cli", "none"):
+        raise ConfigError("[llm] research_backend 只能是 auto / claude_cli / openai / codex_cli / none")
+    if cfg.llm.research_backend == "codex_cli" and cfg.llm.research_model in CLAUDE_ALIASES:
+        raise ConfigError("[llm] research_backend = \"codex_cli\" 时 research_model 要写 Codex 的模型名（或留空用默认），"
+                          "haiku/sonnet/opus 只适用于 claude_cli")
     if cfg.llm.backend == "openai":
         if not cfg.llm.base_url:
             raise ConfigError("[llm] backend = \"openai\" 时必须填 base_url，例如 https://api.deepseek.com/v1")

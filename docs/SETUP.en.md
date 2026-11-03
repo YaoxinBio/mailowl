@@ -93,7 +93,7 @@ extra_body = { thinking = { type = "disabled" } }   # required for DeepSeek: too
 api_key = "sk-..."
 ```
 
-`extra_body` is merged into every request as-is, for vendor-specific parameters. Run `mailowl check` afterwards; it makes one real call to confirm the model works. Web research still runs on the local Claude Code (sonnet unless `research_model` is set), or on the same API if you add a Tavily key. The chat agent calls tools, so pick a model with function calling (pure reasoning models will not work).
+`extra_body` is merged into every request as-is, for vendor-specific parameters. Run `mailowl check` afterwards; it makes one real call to confirm the model works. Web research still runs on the local Claude Code (sonnet unless `research_model` is set), on the same API if you add a Tavily key, or on the Codex CLI logged in on the host with `research_backend = "codex_cli"` (its own web search, with the isolation and sandbox described below; about 20–40 s per question). The chat agent calls tools, so pick a model with function calling (pure reasoning models will not work).
 
 
 To keep triage on your machine (no new message is sent to a model vendor) while drafting still uses Claude:

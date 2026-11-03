@@ -34,8 +34,8 @@ triage_concurrency = 2
 # 上网查资料：对话 Agent 不能直接上网，只能提一个问题，你在飞书卡片上点「同意」后，
 # 交给一个读不到邮箱的研究 Agent 去查。
 #   auto：openai 后端且配了 tavily_api_key 时用它；否则本机有 Claude Code 就用 claude_cli；都没有则关闭
-research_backend = "auto"               # auto / claude_cli / openai / none
-research_model = ""                     # 留空同 agent_model
+research_backend = "auto"               # auto / claude_cli / openai / codex_cli / none（codex_cli：本机 Codex 的原生搜索）
+research_model = ""                     # 留空：claude_cli 同 agent_model，codex_cli 用 Codex 的默认模型
 
 # 隐私选项：分级单独用本地模型（每封新邮件都不交给模型厂商），对话起草仍用上面的模型。
 # 需要密钥的服务把 api_key 写在 secrets.toml 的 [llm.triage]。

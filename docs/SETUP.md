@@ -93,7 +93,7 @@ extra_body = { thinking = { type = "disabled" } }   # DeepSeek 必须关思考�
 api_key = "sk-..."
 ```
 
-`extra_body` 会原样并进每次请求，用来传各家特有的参数。改完运行 `mailowl check`，会实际调用一次模型确认能通。联网查资料仍由本机的 Claude Code 完成（没填 `research_model` 时用 sonnet），也可以配 Tavily 改走同一个接口。
+`extra_body` 会原样并进每次请求，用来传各家特有的参数。改完运行 `mailowl check`，会实际调用一次模型确认能通。联网查资料仍由本机的 Claude Code 完成（没填 `research_model` 时用 sonnet），也可以配 Tavily 改走同一个接口，或者设 `research_backend = "codex_cli"` 交给本机已登录的 Codex（原生搜索，同样套着下面说的隔离和沙箱，每次约 20–40 秒）。
 
 
 只想让分级在本地完成（每封新邮件都不交给模型厂商），对话起草仍用 Claude：

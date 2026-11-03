@@ -195,7 +195,13 @@ def make_llm(cfg: Config, db) -> LLMRouter:
 
     def get(name: str):
         if name not in backends:
-            backends[name] = ClaudeCLI(cfg) if name == "claude_cli" else OpenAIChat(cfg, db)
+            if name == "claude_cli":
+                backends[name] = ClaudeCLI(cfg)
+            elif name == "codex_cli":                     # 只会是研究后端：Codex 没有邮件工具，不能做对话
+                from .codex_cli import CodexCLI
+                backends[name] = CodexCLI(cfg, model=cfg.llm.research_model or None)
+            else:
+                backends[name] = OpenAIChat(cfg, db)
         return backends[name]
 
     rb = research_backend(cfg)

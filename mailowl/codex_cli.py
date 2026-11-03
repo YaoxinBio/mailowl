@@ -1,6 +1,8 @@
-"""分级的可选后端：本机已登录的 OpenAI Codex CLI（codex exec），用的是 ChatGPT 订阅额度。
+"""分级和联网研究的可选后端：本机已登录的 OpenAI Codex CLI（codex exec），用的是 ChatGPT 订阅额度。
 
-只实现 structured()（邮件分级）；对话 Agent 和联网研究仍走 claude_cli / openai 后端。
+实现 structured()（邮件分级）和 research()（联网研究，打开 Codex 原生的 web_search）；
+对话 Agent 要用邮件工具，仍走 claude_cli / openai 后端。研究时同样读不到邮箱：独立的 CODEX_HOME 里
+没有 MailOwl 的邮件工具，外层沙箱禁止读 MailOwl 的配置和数据目录，命令也执行不了。
 
 实测过的几个坑（codex-cli 0.165，别退回去）：
 - 要用独立的 CODEX_HOME：~/.codex/AGENTS.md 不受 --ignore-user-config、project_doc_max_bytes 影响，
@@ -24,8 +26,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .config import Config
-from .llm import LLMError
+from .config import Config, lang_directive
+from .llm import RESEARCH_SYSTEM, LLMError
 from .openai_compat import conform, extract_json
 
 log = logging.getLogger(__name__)
@@ -40,7 +42,7 @@ def _sb_quote(p: Path) -> str:
 
 class CodexCLI:
     def __init__(self, cfg: Config, *, model: str | None = None, effort: str | None = None, bin: str | None = None):
-        t = cfg.llm.triage                                # 没传就用 [llm.triage] 里的 model / effort / codex_bin
+        t = cfg.llm.triage if cfg.llm.triage.get("backend") == "codex_cli" else {}   # 没传就用 [llm.triage] 的设置
         self.cfg = cfg
         self.model = model or t.get("model")
         self.effort = effort or t.get("effort") or "low"
@@ -96,10 +98,13 @@ class CodexCLI:
                 f"(deny {ops} {' '.join(f'(subpath {_sb_quote(p)})' for p in deny)})\n"
                 f"(allow {ops} {' '.join(f'(subpath {_sb_quote(p)})' for p in allow)})\n")
 
-    def command(self, cwd: Path, schema_file: Path, out_file: Path, model: str | None) -> list[str]:
+    def command(self, cwd: Path, schema_file: Path | None, out_file: Path, model: str | None, *,
+                web: bool = False) -> list[str]:
         args = [self.bin, "exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check",
                 "-C", str(cwd), "-s", "read-only", "-c", f"model_reasoning_effort={self.effort}",
-                "-c", 'web_search="disabled"', "--output-schema", str(schema_file), "-o", str(out_file)]
+                "-c", f'web_search="{"live" if web else "disabled"}"', "-o", str(out_file)]
+        if schema_file is not None:
+            args += ["--output-schema", str(schema_file)]
         if model or self.model:
             args += ["-m", model or self.model]
         args.append("-")                                  # 提示从 stdin 读：邮件正文可能很长
@@ -107,20 +112,21 @@ class CodexCLI:
             args = [SANDBOX_EXEC, "-p", self.sandbox_profile(), *args]
         return args
 
-    async def structured(self, prompt: str, schema: dict, *, system: str, model: str | None = None,
-                         timeout: int | None = None) -> tuple[dict[str, Any], float]:
+    async def _exec(self, text: str, *, schema: dict | None, web: bool, model: str | None, timeout: int) -> str:
+        """跑一次 codex exec，返回最后一条回答。"""
         self.prepare()
-        timeout = timeout or self.cfg.llm.triage_timeout
         with tempfile.TemporaryDirectory(dir=self.work) as td:
             td = Path(td)
-            cwd, schema_file, out_file = td / "cwd", td / "schema.json", td / "out.json"
+            cwd, schema_file, out_file = td / "cwd", td / "schema.json", td / "out.txt"
             cwd.mkdir()
-            schema_file.write_text(json.dumps(schema, ensure_ascii=False))
+            if schema is not None:
+                schema_file.write_text(json.dumps(schema, ensure_ascii=False))
             proc = await asyncio.create_subprocess_exec(
-                *self.command(cwd, schema_file, out_file, model), cwd=str(cwd), env=self._env(),
+                *self.command(cwd, schema_file if schema is not None else None, out_file, model, web=web),
+                cwd=str(cwd), env=self._env(),
                 stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             try:
-                _, err = await asyncio.wait_for(proc.communicate(f"{system}\n\n{prompt}".encode("utf-8")), timeout)
+                _, err = await asyncio.wait_for(proc.communicate(text.encode("utf-8")), timeout)
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.wait()
@@ -129,4 +135,16 @@ class CodexCLI:
             if proc.returncode != 0 or not raw.strip():
                 msg = err.decode("utf-8", "replace").strip()[-800:]
                 raise LLMError(f"codex 调用失败 (rc={proc.returncode}): {msg}")
+        return raw
+
+    async def structured(self, prompt: str, schema: dict, *, system: str, model: str | None = None,
+                         timeout: int | None = None) -> tuple[dict[str, Any], float]:
+        raw = await self._exec(f"{system}\n\n{prompt}", schema=schema, web=False, model=model,
+                               timeout=timeout or self.cfg.llm.triage_timeout)
         return conform(extract_json(raw), schema), 0.0     # 订阅额度，不按 token 计费
+
+    async def research(self, question: str, *, timeout: int | None = None) -> str:
+        """联网研究：只打开 web_search，不给结构化输出；每次约 20–40 秒。"""
+        raw = await self._exec(f"{RESEARCH_SYSTEM}\n{lang_directive(self.cfg)}\n\n{question}", schema=None, web=True,
+                               model=None, timeout=timeout or self.cfg.llm.agent_timeout)
+        return raw.strip()

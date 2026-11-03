@@ -116,3 +116,26 @@ def test_codex_failure_raises_with_stderr(cfg, monkeypatch):
     cx = CodexCLI(with_codex_triage(cfg))
     with pytest.raises(LLMError, match="usage limit"):
         run(cx.structured("x", SCHEMA, system="s"))
+
+
+def test_codex_research_uses_live_web_search(cfg, monkeypatch):
+    monkeypatch.setattr(codex_cli.sys, "platform", "linux")
+    p = cfg.path
+    p.write_text(p.read_text("utf-8").replace("[general]", '[llm]\nresearch_backend = "codex_cli"\n'
+                 'research_model = "gpt-6.1-sol"\n[llm.triage]\nbackend = "openai"\n'
+                 'base_url = "http://127.0.0.1:11434/v1"\nmodel = "qwen3:8b"\n[general]', 1), "utf-8")
+    c = load_config(p)
+    from mailowl.db import DB
+    from mailowl.llm import RESEARCH_SYSTEM, make_llm
+    r = make_llm(c, DB(c.db_path))
+    assert isinstance(r.researcher, CodexCLI) and r.researcher.model == "gpt-6.1-sol", "不能拿分级的 qwen 模型名"
+    calls = []
+    monkeypatch.setattr(codex_cli.asyncio, "create_subprocess_exec", fake_exec(calls, output="  结论……\n来源：https://x  \n"))
+    assert run(r.research("某会议的投稿截止日期？")) == "结论……\n来源：https://x"
+    args, kw, proc = calls[-1]
+    assert 'web_search="live"' in args and "--output-schema" not in args and args[args.index("-m") + 1] == "gpt-6.1-sol"
+    assert RESEARCH_SYSTEM.encode() in proc.stdin and "投稿截止".encode() in proc.stdin
+    assert Path(kw["env"]["CODEX_HOME"]) == r.researcher.home
+    p.write_text(p.read_text("utf-8").replace('research_model = "gpt-6.1-sol"', 'research_model = "sonnet"'), "utf-8")
+    with pytest.raises(ConfigError, match="research_model"):
+        load_config(p)

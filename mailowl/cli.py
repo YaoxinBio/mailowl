@@ -132,15 +132,17 @@ def cmd_check(args) -> int:
             report(f"分级模型 {t['model']}", True, f"{t['base_url']} → {(msg.get('content') or '').strip()[:20]}")
         except Exception as e:
             report(f"分级模型 {t['model']}", False, str(e)[:300])
-    elif t.get("backend") == "codex_cli":
+    rb = research_backend(cfg)
+    if t.get("backend") == "codex_cli" or rb == "codex_cli":
         from .codex_cli import CodexCLI
-        cx = CodexCLI(cfg)
+        cx = CodexCLI(cfg) if t.get("backend") == "codex_cli" else CodexCLI(cfg, model=cfg.llm.research_model or None)
+        use = "、".join(x for x, on in (("分级", t.get("backend") == "codex_cli"), ("联网研究", rb == "codex_cli")) if on)
         try:
             cx.prepare()
             ver = subprocess.run([cx.bin, "--version"], capture_output=True, text=True, timeout=30, env=cx._env())
             st = subprocess.run([cx.bin, "login", "status"], capture_output=True, text=True, timeout=30, env=cx._env())
             status = (st.stdout or st.stderr).strip().splitlines()[-1:] or ["?"]
-            report(f"分级模型 Codex {t.get('model') or '（默认模型）'}", ver.returncode == 0 and st.returncode == 0,
+            report(f"{use}：Codex {cx.model or '（默认模型）'}", ver.returncode == 0 and st.returncode == 0,
                    f"{ver.stdout.strip()}，{status[0]}")
             report("Codex 登录凭据共用", cx.auth_linked(),
                    f"{cx.home / 'auth.json'} → {cx.src_home / 'auth.json'}" if cx.auth_linked() else
@@ -148,9 +150,8 @@ def cmd_check(args) -> int:
             report("Codex 外层沙箱", cx.outer_sandbox, "sandbox-exec：不能执行命令、读不到 MailOwl 的配置和数据"
                    if cx.outer_sandbox else "非 macOS：只有 Codex 自带的只读沙箱")
         except Exception as e:
-            report("分级模型 Codex", False, str(e)[:300])
-    rb = research_backend(cfg)
-    hint = {"claude_cli": "Claude CLI（WebSearch / WebFetch）",
+            report(f"{use}：Codex", False, str(e)[:300])
+    hint = {"claude_cli": "Claude CLI（WebSearch / WebFetch）", "codex_cli": "Codex CLI（原生 web_search，外层沙箱）",
             "openai": "OpenAI 兼容接口 + " + ("Tavily 搜索" if cfg.llm.tavily_api_key else "只能打开网址（没配 Tavily，不能搜索）"),
             None: "未配置：Agent 不能上网查资料"}[rb]
     print(f"{'✅' if rb else '➖'} 联网研究：{hint}")
