@@ -133,7 +133,8 @@ class OpenAIChat:
         self.base = (base_url or cfg.llm.base_url).rstrip("/")
         self.api_key = cfg.llm.api_key if api_key is None else api_key
         self.triage_model = triage_model or cfg.llm.triage_model
-        self.extra_body = dict(extra_body or {})   # 厂商特有的请求参数，如 DeepSeek 的 thinking；不覆盖下面的标准字段
+        # 厂商特有的请求参数，如 DeepSeek 的 thinking；不覆盖下面的标准字段。没传就用 [llm] 的
+        self.extra_body = dict(cfg.llm.extra_body if extra_body is None else extra_body)
         self.transport = transport          # 测试用
 
     # ---------------------------------------------------------------- HTTP

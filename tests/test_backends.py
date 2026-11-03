@@ -139,6 +139,42 @@ def test_openai_agent_tool_loop_and_history(cfg, db):
     assert db.q1("SELECT SUM(json_extract(detail,'$.tokens')) n FROM actions WHERE kind='llm_tokens'")["n"] == 45
 
 
+def test_llm_extra_body_sent_in_every_tool_round(cfg, db, tmp_path):
+    openai_cfg(cfg)
+    cfg.llm.extra_body = {"thinking": {"type": "disabled"}}
+    mid = add_mail(db, "1", subject="Need CV")
+    reqs = []
+    replies = [{"content": None, "tool_calls": [{"id": "c1", "type": "function", "function": {
+                   "name": "get_mail", "arguments": json.dumps({"mail_id": mid})}}]},
+               {"content": "他们要 CV。"}]
+    res = run(OpenAIChat(cfg, db, transport=scripted(replies, reqs)).agent(
+        "这封要什么？", scope=f"mail:{mid}", session_id=None, system="sys"))
+    assert res.text == "他们要 CV。" and len(reqs) == 2
+    assert all(r["thinking"] == {"type": "disabled"} and r["model"] == "deepseek-chat" for r in reqs)
+    assert OpenAIChat(cfg, db, extra_body={}).extra_body == {}, "单独的分级后端不继承 [llm] 的参数"
+    assert ClaudeCLI(cfg).research_default_model() == "sonnet", "对话不用 Claude 时，Claude 研究不能拿 deepseek 的模型名"
+    cfg.llm.backend = "claude_cli"
+    assert ClaudeCLI(cfg).research_default_model() == cfg.llm.agent_model
+
+
+def test_llm_extra_body_config(cfg):
+    p = cfg.path
+    base = p.read_text("utf-8")
+    p.write_text(base.replace("[general]", '[llm]\nbackend = "openai"\nbase_url = "https://api.deepseek.com/v1"\n'
+                              'triage_model = "deepseek-flash"\nagent_model = "deepseek-flash"\n'
+                              'extra_body = { thinking = { type = "disabled" } }\n'
+                              '[llm.triage]\nbackend = "openai"\nbase_url = "http://127.0.0.1:11434/v1"\nmodel = "qwen3:8b"\n'
+                              '[general]', 1), "utf-8")
+    c = load_config(p)
+    from mailowl.llm import make_llm
+    from mailowl.db import DB
+    r = make_llm(c, DB(c.db_path))
+    assert r.main.extra_body == {"thinking": {"type": "disabled"}} and r.triager.extra_body == {}
+    p.write_text(base.replace("[general]", '[llm]\nextra_body = { thinking = { type = "disabled" } }\n[general]', 1), "utf-8")
+    with pytest.raises(ConfigError, match="extra_body"):
+        load_config(p)
+
+
 def test_openai_tool_round_cap(cfg, db):
     openai_cfg(cfg).llm.max_tool_rounds = 2
     reqs = []

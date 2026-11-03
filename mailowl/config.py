@@ -82,6 +82,9 @@ class LLMConfig:
     max_body_chars: int = 12000
     max_tool_rounds: int = 12         # openai 后端：一轮对话里最多调用几次工具
     history_max_chars: int = 60000    # openai 后端：保留的对话历史长度
+    # openai 后端：厂商特有的请求参数，原样并进请求体。DeepSeek 做对话必须关思考：
+    # extra_body = { thinking = { type = "disabled" } }（开着思考调用工具，要把思考内容逐轮传回，否则 400）
+    extra_body: dict = field(default_factory=dict)
     # 上网查资料由独立的研究 Agent 完成：它读不到邮箱，每次都要用户在飞书卡片上同意
     research_backend: str = "auto"    # auto | claude_cli | openai | none
     research_model: str = ""          # 留空用 agent_model
@@ -297,6 +300,9 @@ def load_config(path: str | os.PathLike | None = None) -> Config:
         if bad:
             raise ConfigError(f"[llm] 用 openai 后端时 {' / '.join(bad)} 要写该服务的模型名（例如 deepseek-flash），"
                               "haiku/sonnet/opus 只适用于 claude_cli")
+    if not isinstance(cfg.llm.extra_body, dict) or (cfg.llm.extra_body and cfg.llm.backend != "openai"):
+        raise ConfigError('[llm] extra_body 只用于 backend = "openai"，写成表，'
+                          '例如 DeepSeek 关闭思考：extra_body = { thinking = { type = "disabled" } }')
     t = cfg.llm.triage
     if t:
         extra = set(t) - {"backend", "base_url", "model", "api_key", "effort", "codex_bin", "extra_body"}

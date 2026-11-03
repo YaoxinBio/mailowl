@@ -84,6 +84,7 @@ backend = "openai"
 base_url = "https://api.deepseek.com/v1"
 triage_model = "deepseek-flash"
 agent_model = "deepseek-flash"
+extra_body = { thinking = { type = "disabled" } }   # DeepSeek 必须关思考：开着思考调用工具会报 400
 ```
 
 ```toml
@@ -92,7 +93,7 @@ agent_model = "deepseek-flash"
 api_key = "sk-..."
 ```
 
-改完运行 `mailowl check`，会实际调用一次模型确认能通。
+`extra_body` 会原样并进每次请求，用来传各家特有的参数。改完运行 `mailowl check`，会实际调用一次模型确认能通。联网查资料仍由本机的 Claude Code 完成（没填 `research_model` 时用 sonnet），也可以配 Tavily 改走同一个接口。
 
 
 只想让分级在本地完成（每封新邮件都不交给模型厂商），对话起草仍用 Claude：

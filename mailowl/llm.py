@@ -141,10 +141,14 @@ class ClaudeCLI:
         )
 
 
+    def research_default_model(self) -> str:
+        """research_model 没填：主后端也是 Claude 就跟对话同一个模型，否则（如对话用 DeepSeek）用 sonnet。"""
+        return self.cfg.llm.agent_model if self.cfg.llm.backend == "claude_cli" else "sonnet"
+
     async def research(self, question: str, *, timeout: int | None = None) -> str:
         """独立研究 Agent：只有 WebSearch/WebFetch，不挂 MCP（读不到邮箱），不保存会话。"""
         args = ["-p", "--output-format", "json",
-                "--model", self.cfg.llm.research_model or self.cfg.llm.agent_model,
+                "--model", self.cfg.llm.research_model or self.research_default_model(),
                 "--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch", "WebFetch",
                 "--strict-mcp-config", "--no-session-persistence",
                 "--disable-slash-commands", "--setting-sources", "",
@@ -199,7 +203,7 @@ def make_llm(cfg: Config, db) -> LLMRouter:
     triager = None
     if t.get("backend") == "openai":
         triager = OpenAIChat(cfg, db, base_url=t["base_url"], api_key=t.get("api_key", ""), triage_model=t["model"],
-                             extra_body=t.get("extra_body"))
+                             extra_body=t.get("extra_body") or {})
     elif t.get("backend") == "claude_cli":
         triager = ClaudeCLI(cfg, triage_model=t.get("model"))
     elif t.get("backend") == "codex_cli":

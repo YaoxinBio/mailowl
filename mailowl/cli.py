@@ -126,7 +126,8 @@ def cmd_check(args) -> int:
         from .db import DB
         from .openai_compat import OpenAIChat
         try:
-            msg = asyncio.run(OpenAIChat(cfg, DB(cfg.db_path), base_url=t["base_url"], api_key=t.get("api_key", "")).chat(
+            msg = asyncio.run(OpenAIChat(cfg, DB(cfg.db_path), base_url=t["base_url"], api_key=t.get("api_key", ""),
+                                         extra_body=t.get("extra_body") or {}).chat(
                 model=t["model"], messages=[{"role": "user", "content": "只回复 ok"}], timeout=120, kind="check"))
             report(f"分级模型 {t['model']}", True, f"{t['base_url']} → {(msg.get('content') or '').strip()[:20]}")
         except Exception as e:

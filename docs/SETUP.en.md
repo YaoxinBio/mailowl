@@ -84,6 +84,7 @@ backend = "openai"
 base_url = "https://api.deepseek.com/v1"
 triage_model = "deepseek-flash"
 agent_model = "deepseek-flash"
+extra_body = { thinking = { type = "disabled" } }   # required for DeepSeek: tool calls with thinking on fail with HTTP 400
 ```
 
 ```toml
@@ -92,7 +93,7 @@ agent_model = "deepseek-flash"
 api_key = "sk-..."
 ```
 
-Run `mailowl check` afterwards; it makes one real call to confirm the model works. The chat agent calls tools, so pick a model with function calling (pure reasoning models will not work).
+`extra_body` is merged into every request as-is, for vendor-specific parameters. Run `mailowl check` afterwards; it makes one real call to confirm the model works. Web research still runs on the local Claude Code (sonnet unless `research_model` is set), or on the same API if you add a Tavily key. The chat agent calls tools, so pick a model with function calling (pure reasoning models will not work).
 
 
 To keep triage on your machine (no new message is sent to a model vendor) while drafting still uses Claude:

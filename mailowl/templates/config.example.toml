@@ -24,6 +24,7 @@ max_message_bytes = 3000000             # 超过这个大小的邮件只取头�
 #     OpenRouter base_url = "https://openrouter.ai/api/v1"（也能用 Claude、Gemini）
 #     本地 Ollama base_url = "http://127.0.0.1:11434/v1"（api_key 可留空）
 #   注意：对话 Agent 要调用工具，选支持 function calling 的模型，纯推理模型不行。
+#   DeepSeek 还要关掉默认的思考（开着思考调用工具会报 400）：extra_body = { thinking = { type = "disabled" } }
 backend = "claude_cli"
 claude_bin = "~/.local/bin/claude"
 base_url = ""

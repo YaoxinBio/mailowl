@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `[llm] extra_body` does the same for the main OpenAI-compatible backend, so chat and drafting can run on DeepSeek with thinking off (with thinking on, DeepSeek rejects tool calls unless the reasoning is passed back). When chat is not on Claude, Claude-based research defaults to sonnet instead of reusing the chat model name.
 - `[llm.triage] extra_body` passes vendor-specific request fields to an OpenAI-compatible triage model, e.g. `{ thinking = { type = "disabled" } }` to turn off DeepSeek's thinking mode. DeepSeek examples now use `deepseek-flash`.
 - Triage can run on the Codex CLI (`[llm.triage] backend = "codex_cli"`), using the ChatGPT plan on the host. Codex gets its own `CODEX_HOME` (so the user's `AGENTS.md` and config are not loaded) and, on macOS, an outer `sandbox-exec` profile: it cannot run commands or read MailOwl's config and data directories.
 - Digests are now logged: sent (with counts and the message id), skipped because nothing is new, or not sent because no chat user is paired.
