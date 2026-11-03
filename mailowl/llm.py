@@ -198,7 +198,8 @@ def make_llm(cfg: Config, db) -> LLMRouter:
     t = cfg.llm.triage
     triager = None
     if t.get("backend") == "openai":
-        triager = OpenAIChat(cfg, db, base_url=t["base_url"], api_key=t.get("api_key", ""), triage_model=t["model"])
+        triager = OpenAIChat(cfg, db, base_url=t["base_url"], api_key=t.get("api_key", ""), triage_model=t["model"],
+                             extra_body=t.get("extra_body"))
     elif t.get("backend") == "claude_cli":
         triager = ClaudeCLI(cfg, triage_model=t.get("model"))
     elif t.get("backend") == "codex_cli":

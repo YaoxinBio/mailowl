@@ -127,18 +127,20 @@ RESEARCH_TOOLS = [
 
 class OpenAIChat:
     def __init__(self, cfg: Config, db: DB, transport: httpx.AsyncBaseTransport | None = None, *,
-                 base_url: str | None = None, api_key: str | None = None, triage_model: str | None = None):
+                 base_url: str | None = None, api_key: str | None = None, triage_model: str | None = None,
+                 extra_body: dict[str, Any] | None = None):
         self.cfg, self.db = cfg, db
         self.base = (base_url or cfg.llm.base_url).rstrip("/")
         self.api_key = cfg.llm.api_key if api_key is None else api_key
         self.triage_model = triage_model or cfg.llm.triage_model
+        self.extra_body = dict(extra_body or {})   # 厂商特有的请求参数，如 DeepSeek 的 thinking；不覆盖下面的标准字段
         self.transport = transport          # 测试用
 
     # ---------------------------------------------------------------- HTTP
     async def chat(self, *, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None,
                    tool_choice: str | None = None, json_mode: bool = False, timeout: int = 180,
                    kind: str = "") -> dict[str, Any]:
-        body: dict[str, Any] = {"model": model, "messages": messages}
+        body: dict[str, Any] = {**self.extra_body, "model": model, "messages": messages}
         if tools:
             body["tools"] = tools
             if tool_choice:

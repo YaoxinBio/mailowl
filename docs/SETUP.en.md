@@ -82,8 +82,8 @@ The default is the Claude Code CLI logged in on the host. Any OpenAI-compatible 
 [llm]
 backend = "openai"
 base_url = "https://api.deepseek.com/v1"
-triage_model = "deepseek-chat"
-agent_model = "deepseek-chat"
+triage_model = "deepseek-flash"
+agent_model = "deepseek-flash"
 ```
 
 ```toml
@@ -92,7 +92,7 @@ agent_model = "deepseek-chat"
 api_key = "sk-..."
 ```
 
-Run `mailowl check` afterwards; it makes one real call to confirm the model works. The chat agent calls tools, so pick a model with function calling (pure reasoning models such as deepseek-reasoner will not work).
+Run `mailowl check` afterwards; it makes one real call to confirm the model works. The chat agent calls tools, so pick a model with function calling (pure reasoning models will not work).
 
 
 To keep triage on your machine (no new message is sent to a model vendor) while drafting still uses Claude:
@@ -103,6 +103,23 @@ To keep triage on your machine (no new message is sent to a model vendor) while 
 backend = "openai"
 base_url = "http://127.0.0.1:11434/v1"   # local Ollama
 model = "qwen3:8b"
+```
+
+To send only triage to DeepSeek (cheap; reachable directly from mainland China) while drafting stays on Claude: DeepSeek has "thinking" on by default, which triage does not need and which makes it slower, so turn it off with `extra_body`. It is merged into the request body as-is, so other vendors' own parameters can be passed the same way:
+
+```toml
+# config.toml
+[llm.triage]
+backend = "openai"
+base_url = "https://api.deepseek.com/v1"
+model = "deepseek-flash"
+extra_body = { thinking = { type = "disabled" } }
+```
+
+```toml
+# secrets.toml
+[llm.triage]
+api_key = "sk-..."
 ```
 
 Triage can also run on the Codex CLI logged in on the host (`codex login`), using your ChatGPT plan — handy when Claude usage is tight:

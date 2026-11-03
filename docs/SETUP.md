@@ -82,8 +82,8 @@ mailowl service status                  # 运行状态；restart / logs / uninst
 [llm]
 backend = "openai"
 base_url = "https://api.deepseek.com/v1"
-triage_model = "deepseek-chat"
-agent_model = "deepseek-chat"
+triage_model = "deepseek-flash"
+agent_model = "deepseek-flash"
 ```
 
 ```toml
@@ -103,6 +103,23 @@ api_key = "sk-..."
 backend = "openai"
 base_url = "http://127.0.0.1:11434/v1"   # 本地 Ollama
 model = "qwen3:8b"
+```
+
+只把分级交给 DeepSeek（便宜，国内直连），对话起草仍用 Claude。DeepSeek 默认开着「思考」，分级用不着、还会变慢，用 `extra_body` 关掉——它会原样并进请求体，其他厂商的特有参数也可以这样传：
+
+```toml
+# config.toml
+[llm.triage]
+backend = "openai"
+base_url = "https://api.deepseek.com/v1"
+model = "deepseek-flash"
+extra_body = { thinking = { type = "disabled" } }
+```
+
+```toml
+# secrets.toml
+[llm.triage]
+api_key = "sk-..."
 ```
 
 也可以让分级走本机已登录的 Codex CLI（`codex login`），用 ChatGPT 订阅额度，适合 Claude 额度紧张时分担：

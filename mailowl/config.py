@@ -88,7 +88,7 @@ class LLMConfig:
     tavily_api_key: str = ""          # openai 研究后端的搜索接口（tavily.com），写在 secrets.toml 的 [llm]
     agent_web: bool = False           # 已废弃：对话 Agent 不再直接上网，保留只为兼容旧配置
     # 可选：分级单独用另一个模型，例如本地 Ollama，让每封新邮件都不交给模型厂商；对话起草仍用上面的设置。
-    # [llm.triage] backend = "openai" / base_url / model；api_key 写在 secrets.toml 的 [llm.triage]
+    # [llm.triage] backend = "openai" / base_url / model / extra_body；api_key 写在 secrets.toml 的 [llm.triage]
     triage: dict = field(default_factory=dict)
 
 
@@ -295,11 +295,11 @@ def load_config(path: str | os.PathLike | None = None) -> Config:
             raise ConfigError("[llm] backend = \"openai\" 时必须填 base_url，例如 https://api.deepseek.com/v1")
         bad = [k for k in ("triage_model", "agent_model") if getattr(cfg.llm, k) in CLAUDE_ALIASES]
         if bad:
-            raise ConfigError(f"[llm] 用 openai 后端时 {' / '.join(bad)} 要写该服务的模型名（例如 deepseek-chat），"
+            raise ConfigError(f"[llm] 用 openai 后端时 {' / '.join(bad)} 要写该服务的模型名（例如 deepseek-flash），"
                               "haiku/sonnet/opus 只适用于 claude_cli")
     t = cfg.llm.triage
     if t:
-        extra = set(t) - {"backend", "base_url", "model", "api_key", "effort", "codex_bin"}
+        extra = set(t) - {"backend", "base_url", "model", "api_key", "effort", "codex_bin", "extra_body"}
         if extra:
             raise ConfigError(f"[llm.triage] 中有未知配置项: {', '.join(sorted(extra))}")
         t.setdefault("backend", "openai")
@@ -309,6 +309,9 @@ def load_config(path: str | os.PathLike | None = None) -> Config:
             raise ConfigError("[llm.triage] 用 openai 时要写 base_url 和 model，例如本地 Ollama：http://127.0.0.1:11434/v1")
         if t["backend"] in ("openai", "codex_cli") and t.get("model") in CLAUDE_ALIASES:
             raise ConfigError("[llm.triage] 的 model 要写该服务的模型名，haiku/sonnet/opus 只适用于 claude_cli")
+        if "extra_body" in t and (t["backend"] != "openai" or not isinstance(t["extra_body"], dict)):
+            raise ConfigError('[llm.triage] extra_body 只用于 backend = "openai"，写成表，'
+                              '例如 DeepSeek 关闭思考：extra_body = { thinking = { type = "disabled" } }')
     if cfg.language not in LANG_DIRECTIVE:
         raise ConfigError("[general] language 只能是 zh 或 en")
     if cfg.bark.content not in ("full", "minimal"):

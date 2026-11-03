@@ -181,7 +181,7 @@ def test_openai_config_validation(cfg, tmp_path):
     text = p.read_text("utf-8").replace("[general]", '[llm]\nbackend = "openai"\nbase_url = "https://api.deepseek.com/v1"\n'
                                                      'agent_web = true\n[general]', 1)
     p.write_text(text, "utf-8")
-    with pytest.raises(ConfigError, match="deepseek-chat"):
+    with pytest.raises(ConfigError, match="deepseek-flash"):
         load_config(p)
     p.write_text(text.replace('agent_web = true', 'agent_web = true\ntriage_model = "deepseek-chat"\n'
                                                   'agent_model = "deepseek-chat"'), "utf-8")
@@ -248,6 +248,33 @@ def test_separate_local_triage_backend(cfg):
     p.write_text(p.read_text("utf-8").replace('model = "qwen3:8b"', 'model = "haiku"'), "utf-8")
     with pytest.raises(ConfigError, match="haiku"):
         load_config(p)
+
+
+def test_triage_extra_body_turns_off_deepseek_thinking(cfg):
+    p = cfg.path
+    p.write_text(p.read_text("utf-8").replace("[general]", '[llm.triage]\nbackend = "openai"\n'
+                                              'base_url = "https://api.deepseek.com/v1"\nmodel = "deepseek-flash"\n'
+                                              'extra_body = { thinking = { type = "disabled" } }\n[general]', 1), "utf-8")
+    c = load_config(p)
+    from mailowl.db import DB
+    from mailowl.llm import make_llm
+    db = DB(c.db_path)
+    r = make_llm(c, db)
+    reqs = []
+    r.triager.transport = scripted([{"content": '{"level": 3, "category": "newsletter", "summary": "周报", "analysis": "",'
+                                                ' "deadline": null, "needs_reply": false, "action_items": [], "tags": []}'}], reqs)
+    out, _ = run(r.triager.structured("邮件", SCHEMA, system="分级"))
+    assert out["level"] == 3 and reqs[0]["thinking"] == {"type": "disabled"}
+    assert reqs[0]["model"] == "deepseek-flash" and reqs[0]["response_format"] == {"type": "json_object"}
+    main = OpenAIChat(openai_cfg(c), db, transport=scripted([{"content": "好"}], reqs))
+    run(main.chat(model="m", messages=[]))
+    assert "thinking" not in reqs[-1], "只作用于分级，不影响对话后端"
+    good = p.read_text("utf-8")
+    for a, b in (('extra_body = { thinking = { type = "disabled" } }', 'extra_body = "x"'),
+                 ('backend = "openai"', 'backend = "codex_cli"')):
+        p.write_text(good.replace(a, b, 1), "utf-8")
+        with pytest.raises(ConfigError, match="extra_body"):
+            load_config(p)
 
 
 def test_bark_minimal_content_hides_mail(cfg, monkeypatch):
