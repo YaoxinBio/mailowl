@@ -143,7 +143,7 @@ mailowl service install   # 装成后台服务（登录后自动启动，崩溃�
 
 **尚未完成或待验证：**
 
-- OpenAI 兼容后端已用本地 Ollama 模型实测；DeepSeek、OpenAI 等在线接口还没实测，基于 Tavily 的网页搜索尚未验证。
+- OpenAI 兼容后端已用本地 Ollama 模型实测，DeepSeek 只实测了分级；对话和起草在 DeepSeek、OpenAI 等在线接口上还没实测，基于 Tavily 的网页搜索尚未验证。
 - 目前仅支持 macOS（依赖 `launchd`），暂未提供 Linux / Docker 部署方案。
 - 邮箱需支持授权码登录：仅允许 OAuth 的 Outlook / Hotmail 暂不能直接接入，可以先自动转发到支持的邮箱（见安装文档）；Gmail 需配合应用专用密码使用，暂不支持 OAuth。
 - 聊天端目前仅支持飞书，Lark 国际版尚未测试。
