@@ -398,6 +398,9 @@ def _load_llm(raw: dict[str, Any], sec: dict[str, Any]) -> LLMConfig:
     llm.research_backend = llm.research_backend or llm.agent_backend
     for role in ROLES:
         n = getattr(llm, f"{role}_backend")
+        if n == "auto" and n not in llm.backends:
+            raise ConfigError(f'[llm] {role}_backend = "auto" 是 0.1.0 的写法：用了 [llm.backends] 就写一个后端的名字'
+                              f'{"，或 \"none\" 关闭" if role == "research" else ""}（已定义：{names}）')
         if n not in llm.backends and not (role == "research" and n == "none"):
             raise ConfigError(f'[llm] {role}_backend = "{n}" 没有对应的 [llm.backends.{n}]（已定义：{names}）')
     if llm.backends[llm.agent_backend].type == "codex_cli":

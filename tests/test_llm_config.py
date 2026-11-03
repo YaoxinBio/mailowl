@@ -62,6 +62,7 @@ def test_roles_default_to_the_only_backend(cfg):
 @pytest.mark.parametrize("llm, secrets, match", [
     (NEW.replace('agent_backend = "deepseek"', 'agent_backend = "codex"'), "", "Codex"),
     (NEW.replace('research_backend = "codex"', 'research_backend = "nope"'), "", "nope"),
+    (NEW.replace('research_backend = "codex"', 'research_backend = "auto"'), "", "0.1.0"),
     (NEW.replace("[llm]\n", '[llm]\nbackend = "openai"\n', 1), "", "旧写法"),
     (NEW, '[llm.backends.ghost]\napi_key = "x"\n', "ghost"),
     (NEW, '[llm]\napi_key = "sk-old"\n', "api_key"),
