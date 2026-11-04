@@ -183,12 +183,15 @@ def test_digest_todos_do_not_pile_up(cfg, db):
     assert st(stale) == "expired" and st(keep) == "open"
     dig = bot.sent[-1]
     body = json.dumps(dig["card"], ensure_ascii=False)
-    assert "交报告" in body and "自动收起：拍证件照" in body and '"todo_done"' in body
+    assert "交报告" in body and "拍证件照" not in body and '"todo_done"' in body, "收起的待办不再出现在摘要里"
     run(svc.on_card_action(action({"a": "todo_done", "t": keep}, message_id=dig["message_id"])))
     assert st(keep) == "done"
     assert bot.sent[-1]["kind"] == "update" and bot.sent[-1]["target"] == dig["message_id"]
     upd = json.dumps(bot.sent[-1]["card"], ensure_ascii=False)
-    assert "✅ 交报告" in upd and "组会通知" in upd, "在摘要上点完成：摘要原地划掉这条，其余内容不变"
+    assert "交报告" not in upd and "组会通知" in upd, "在摘要上点完成：这条从摘要里去掉，其余内容不变"
+    closed = MailTools(cfg, db).list_todos(closed=True)["todos"]
+    assert {t["title"]: t["status"] for t in closed} == {"交报告": "done", "拍证件照": "expired", "核实登录": "done"}, \
+        "问「最近完成了什么」时能查到"
 
 
 # ---------------------------------------------------------------- 发信：只发一次

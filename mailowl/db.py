@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS todos(
   id INTEGER PRIMARY KEY, mail_id INTEGER, title TEXT, due_ts INTEGER,
   status TEXT NOT NULL DEFAULT 'open',       -- open | done | cancelled | expired（过期一天后自动收起）
   reminded INTEGER NOT NULL DEFAULT 0, announced INTEGER NOT NULL DEFAULT 0,
-  origin_scope TEXT, created_at INTEGER);
+  origin_scope TEXT, created_at INTEGER, closed_at INTEGER);
 
 CREATE TABLE IF NOT EXISTS notifications(
   id INTEGER PRIMARY KEY, mail_id INTEGER, channel TEXT, kind TEXT, sent_at INTEGER);
@@ -130,6 +130,8 @@ class DB:
         for col in ("body_main", "sig"):                # 落款与正文分开存，卡片上可一键换落款
             if col not in cols:
                 self.conn.execute(f"ALTER TABLE drafts ADD COLUMN {col} TEXT")
+        if "closed_at" not in {r[1] for r in self.conn.execute("PRAGMA table_info(todos)")}:
+            self.conn.execute("ALTER TABLE todos ADD COLUMN closed_at INTEGER")   # 问「最近完成了什么」时按它查
 
     @property
     def conn(self) -> sqlite3.Connection:
@@ -205,8 +207,8 @@ class DB:
         self.x(f"UPDATE mails SET {sets} WHERE id=?", [*fields.values(), mail_id])
         if fields.get("status") in ("handled", "ignored"):
             # 邮件处理完或标为忽略：由它自动生成的待办（分级/卡片按钮建的）一并完成；对话里让 Agent 建的不动
-            self.x("UPDATE todos SET status='done' WHERE mail_id=? AND status='open' AND origin_scope IN ('auto','card')",
-                   (mail_id,))
+            self.x("UPDATE todos SET status='done', closed_at=? WHERE mail_id=? AND status='open' "
+                   "AND origin_scope IN ('auto','card')", (now(), mail_id))
 
     def thread(self, mail_id: int, limit: int = 20) -> list[sqlite3.Row]:
         """同一线程的邮件（含我方发出的），按时间升序。线程识别：thread_key、Message-ID 互引。"""

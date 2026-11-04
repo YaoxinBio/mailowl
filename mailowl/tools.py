@@ -144,7 +144,9 @@ class MailTools:
              "inputSchema": S({"draft_id": {"type": "integer"}, "filename": {"type": "string"}}, ["draft_id", "filename"])},
             {"name": "create_todo", "description": "创建待办，到期前会通过飞书和 Bark 提醒。due 用本地时间，如 2026-11-07 17:00。",
              "inputSchema": S({"title": {"type": "string"}, "due": {"type": "string"}, "mail_id": {"type": "integer"}}, ["title"])},
-            {"name": "list_todos", "description": "列出未完成的待办。", "inputSchema": S({})},
+            {"name": "list_todos", "description": "列出待办。默认只列未完成的；用户问「最近完成了什么」时用 closed=true，"
+                                                "列出最近 days 天内完成的（done）和过期自动收起的（expired）。",
+             "inputSchema": S({"closed": {"type": "boolean"}, "days": {"type": "integer"}})},
             {"name": "update_mail_status", "description": "把邮件标记为 handled（已处理）、ignored（忽略）或 open（重新打开）。",
              "inputSchema": S({"mail_id": {"type": "integer"}, "status": {"type": "string", "enum": ["handled", "ignored", "open"]}}, ["mail_id", "status"])},
             {"name": "set_sender_preference", "description": "记住对某个发件人的偏好：vip=总是重要，mute=只进摘要，normal=恢复默认。",
@@ -309,7 +311,12 @@ class MailTools:
                         (mail_id, title, due_ts, self.scope, now()))
         return {"ok": True, "todo_id": cur.lastrowid, "due": fmt_ts(self.cfg, due_ts)}
 
-    def list_todos(self):
+    def list_todos(self, closed: bool = False, days: int = 7):
+        if closed:
+            rows = self.db.q("SELECT * FROM todos WHERE status IN ('done','expired') AND closed_at>=? "
+                             "ORDER BY closed_at DESC LIMIT 50", (now() - max(1, days) * 86400,))
+            return {"todos": [{"id": r["id"], "title": r["title"], "status": r["status"], "mail_id": r["mail_id"],
+                               "closed": fmt_ts(self.cfg, r["closed_at"])} for r in rows]}
         rows = self.db.q("SELECT * FROM todos WHERE status='open' ORDER BY COALESCE(due_ts, 9e18)")
         return {"todos": [{"id": r["id"], "title": r["title"], "due": fmt_ts(self.cfg, r["due_ts"]), "mail_id": r["mail_id"]}
                           for r in rows]}

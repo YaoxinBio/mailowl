@@ -190,8 +190,8 @@ def body_card(m, body: str, truncated: bool) -> dict:
 
 
 def digest_card(title: str, groups: list[tuple[str, list[str]]], extra: list[str],
-                todos: list[dict] | None = None, *, todo_more: int = 0, expired: list[str] | None = None) -> dict:
-    """todos：[{"id", "text", "done"}]，没完成的每条带「完成」按钮；expired：这次自动收起的过期待办。"""
+                todos: list[dict] | None = None, *, todo_more: int = 0) -> dict:
+    """todos：[{"id", "text"}]，只列没完成的，每条带「完成」按钮。"""
     els: list[dict] = []
     for name, lines in groups:
         if not lines:
@@ -202,11 +202,8 @@ def digest_card(title: str, groups: list[tuple[str, list[str]]], extra: list[str
     if extra:
         els += [hr(), text("\n".join(extra))]
     if todos:
-        els += [hr(), md(f"**待办**（{sum(not t['done'] for t in todos) + todo_more}）")]
+        els += [hr(), md(f"**待办**（{len(todos) + todo_more}）")]
         for t in todos:
-            if t["done"]:
-                els.append(text(f"✅ {t['text']}", color="grey"))
-                continue
             els.append({"tag": "column_set", "flex_mode": "none", "horizontal_spacing": "8px", "columns": [
                 {"tag": "column", "width": "weighted", "weight": 1, "vertical_align": "center",
                  "elements": [text(f"☐ {t['text']}")]},
@@ -214,8 +211,6 @@ def digest_card(title: str, groups: list[tuple[str, list[str]]], extra: list[str
                  "elements": [button("完成", {"a": "todo_done", "t": t["id"]}, size="small")]}]})
         if todo_more:
             els.append(note(f"还有 {todo_more} 条，发 /todo 查看"))
-    if expired:
-        els.append(note("已过期一天，自动收起：" + "；".join(expired)))
     els.append(note("回复「#编号 你的问题」可以针对某封邮件对话"))
     return card(title, "turquoise", els)
 
