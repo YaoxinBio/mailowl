@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS research_requests(
 
 CREATE TABLE IF NOT EXISTS todos(
   id INTEGER PRIMARY KEY, mail_id INTEGER, title TEXT, due_ts INTEGER,
-  status TEXT NOT NULL DEFAULT 'open',       -- open | done | cancelled
+  status TEXT NOT NULL DEFAULT 'open',       -- open | done | cancelled | expired（过期一天后自动收起）
   reminded INTEGER NOT NULL DEFAULT 0, announced INTEGER NOT NULL DEFAULT 0,
   origin_scope TEXT, created_at INTEGER);
 
@@ -203,6 +203,10 @@ class DB:
             return
         sets = ",".join(f"{k}=?" for k in fields)
         self.x(f"UPDATE mails SET {sets} WHERE id=?", [*fields.values(), mail_id])
+        if fields.get("status") in ("handled", "ignored"):
+            # 邮件处理完或标为忽略：由它自动生成的待办（分级/卡片按钮建的）一并完成；对话里让 Agent 建的不动
+            self.x("UPDATE todos SET status='done' WHERE mail_id=? AND status='open' AND origin_scope IN ('auto','card')",
+                   (mail_id,))
 
     def thread(self, mail_id: int, limit: int = 20) -> list[sqlite3.Row]:
         """同一线程的邮件（含我方发出的），按时间升序。线程识别：thread_key、Message-ID 互引。"""

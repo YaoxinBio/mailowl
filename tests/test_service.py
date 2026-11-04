@@ -163,6 +163,34 @@ def test_level1_goes_to_digest(cfg, db, caplog):
     assert "没有新的待摘要邮件，跳过" in caplog.text
 
 
+def test_digest_todos_do_not_pile_up(cfg, db):
+    bind_owner(db)
+    svc, bot = make_service(cfg, db)
+    a = add_mail(db, "1", subject="组会通知")
+    b = add_mail(db, "2", subject="安全提醒")
+    add = lambda mail_id, title, due, scope="auto": db.x(
+        "INSERT INTO todos(mail_id,title,due_ts,origin_scope,announced,created_at) VALUES(?,?,?,?,1,?)",
+        (mail_id, title, due, scope, now())).lastrowid
+    stale = add(None, "拍证件照", now() - 2 * 86400, "chat:main")
+    ignored = add(b, "核实登录", None)
+    chat = add(b, "我自己让建的", None, "chat:main")
+    keep = add(None, "交报告", now() + 86400, "chat:main")
+    run(svc.on_card_action(action({"a": "mute", "m": b})))
+    st = lambda i: db.q1("SELECT status FROM todos WHERE id=?", (i,))["status"]
+    assert st(ignored) == "done" and st(chat) == "open", "标为不重要只完成它自动生成的待办"
+    run(svc.process_mail(a))
+    run(svc.send_digest(title="摘要"))
+    assert st(stale) == "expired" and st(keep) == "open"
+    dig = bot.sent[-1]
+    body = json.dumps(dig["card"], ensure_ascii=False)
+    assert "交报告" in body and "自动收起：拍证件照" in body and '"todo_done"' in body
+    run(svc.on_card_action(action({"a": "todo_done", "t": keep}, message_id=dig["message_id"])))
+    assert st(keep) == "done"
+    assert bot.sent[-1]["kind"] == "update" and bot.sent[-1]["target"] == dig["message_id"]
+    upd = json.dumps(bot.sent[-1]["card"], ensure_ascii=False)
+    assert "✅ 交报告" in upd and "组会通知" in upd, "在摘要上点完成：摘要原地划掉这条，其余内容不变"
+
+
 # ---------------------------------------------------------------- 发信：只发一次
 def test_send_once_even_if_clicked_twice(cfg, db):
     bind_owner(db)

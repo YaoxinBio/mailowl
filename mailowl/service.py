@@ -31,6 +31,8 @@ from .triage import LEVEL_NAMES, triage_mail
 log = logging.getLogger(__name__)
 
 WATCH_CONN_SECONDS = 25 * 60  # 盯新邮件的连接用多久重建一次
+TODO_EXPIRE_AFTER = 86400     # 待办过了截止时间一天还开着：下次摘要时自动收起
+DIGEST_TODOS = 8              # 摘要里最多列几条待办（带「完成」按钮）
 
 AGENT_SYSTEM = """你是用户的私人邮件助理，通过飞书和用户对话。用户在手机上阅读，回答要简洁、直接。
 你可以用 mail 工具查询用户的本地邮件库（含历史邮件和用户发出的邮件）、保存回复草稿、创建待办、标记邮件状态、记录发件人偏好。你不能直接上网。
@@ -359,10 +361,16 @@ class Service:
         rows = self.db.q("SELECT * FROM mails WHERE route='digest' AND digested_at IS NULL AND status!='history' "
                          "AND triaged_at IS NOT NULL ORDER BY level DESC, date_ts DESC")
         pending = self.db.q("SELECT * FROM mails WHERE status='open' AND level>=2 ORDER BY date_ts DESC LIMIT 10")
-        todos = self.db.q("SELECT * FROM todos WHERE status='open' ORDER BY COALESCE(due_ts, 9e18) LIMIT 8")
         if not rows and not manual:
             log.info("%s：没有新的待摘要邮件，跳过", title)
             return
+        ts = now()
+        expired = self.db.q("SELECT * FROM todos WHERE status='open' AND due_ts IS NOT NULL AND due_ts<?",
+                            (ts - TODO_EXPIRE_AFTER,))
+        if expired:   # 过期一天还没点完成：多半已经办了或不用办了，收起来，免得摘要里越积越多
+            self.db.x(f"UPDATE todos SET status='expired' WHERE id IN ({','.join('?' * len(expired))})",
+                      [t["id"] for t in expired])
+        todos = self.db.q("SELECT * FROM todos WHERE status='open' ORDER BY COALESCE(due_ts, 9e18), id")
 
         def line(r) -> str:
             who = r["from_name"] or r["from_addr"]
@@ -374,18 +382,27 @@ class Service:
         extra = []
         if pending:
             extra.append(f"仍待处理的重要邮件 {len(pending)} 封：" + "、".join(f"#{r['id']}" for r in pending[:8]))
-        for t in todos:
-            extra.append(f"☐ {t['title']}" + (f"（{fmt_ts(self.cfg, t['due_ts'])}）" if t["due_ts"] else ""))
-        if not rows and not extra:
+        shown = [{"id": t["id"], "done": False,
+                  "text": t["title"] + (f"（{fmt_ts(self.cfg, t['due_ts'])}）" if t["due_ts"] else "")}
+                 for t in todos[:DIGEST_TODOS]]
+        view = {"title": title, "groups": groups, "extra": extra, "todos": shown,
+                "todo_more": max(0, len(todos) - DIGEST_TODOS), "expired": [t["title"][:30] for t in expired]}
+        if not rows and not extra and not todos:
             await self.to_owner_md("暂时没有新的待摘要邮件。", reply_to=reply_to)
             log.info("%s：没有内容，已回复「暂时没有」", title)
             return
-        mid = await self.to_owner_card(cards.digest_card(title, groups, extra), kind="digest", reply_to=reply_to)
+        mid = await self.to_owner_card(self._digest_card(view), kind="digest", reply_to=reply_to)
+        if mid:
+            self.db.kv_set(f"digest:{mid}", json.dumps(view, ensure_ascii=False))
         log.info("已发送%s：%d 封（待阅读 %d、通知 %d），仍待处理 %d 封，待办 %d 条，飞书消息 %s",
                  title, len(rows), len(groups[0][1]), len(groups[1][1]), len(pending), len(todos), mid)
-        ts = now()
         with self.db.tx() as c:
             c.executemany("UPDATE mails SET digested_at=? WHERE id=?", [(ts, r["id"]) for r in rows])
+
+    @staticmethod
+    def _digest_card(view: dict) -> dict:
+        return cards.digest_card(view["title"], view["groups"], view["extra"], view["todos"],
+                                 todo_more=view["todo_more"], expired=view["expired"])
 
     async def remind_todos(self) -> None:
         lead = self.cfg.routing.todo_remind_before_minutes * 60
@@ -737,8 +754,6 @@ class Service:
     async def act_done(self, *, msg_id, mail_id, **_):
         self.db.update_mail(mail_id, status="handled")
         self.db.log_action("handled", mail_id)
-        self.db.x("UPDATE todos SET status='done' WHERE mail_id=? AND status='open' AND origin_scope IN ('auto','card')",
-                  (mail_id,))
         await self._refresh_mail_card(mail_id, msg_id)
 
     async def act_reopen(self, *, msg_id, mail_id, **_):
@@ -852,8 +867,15 @@ class Service:
         self.db.x("UPDATE todos SET status='done' WHERE id=?", (todo_id,))
         t = self.db.q1("SELECT * FROM todos WHERE id=?", (todo_id,))
         b = self.db.feishu_binding(msg_id)
+        view = self.db.kv_get(f"digest:{msg_id}") if b is not None and b["kind"] == "digest" else None
         if b is not None and b["kind"] == "mail_card" and t["mail_id"]:  # 在邮件卡片上点的：刷新邮件卡片
             await self._refresh_mail_card(t["mail_id"], msg_id)
+        elif view:                                                       # 在摘要上点的：摘要里把这条划掉
+            view = json.loads(view)
+            for x in view["todos"]:
+                x["done"] = x["done"] or x["id"] == todo_id
+            self.db.kv_set(f"digest:{msg_id}", json.dumps(view, ensure_ascii=False))
+            await self.bot.update_card(msg_id, self._digest_card(view))
         else:
             await self.bot.update_card(msg_id, cards.status_card("待办已完成", [f"✅ {t['title']}"], "green"))
 
@@ -904,8 +926,6 @@ class Service:
             purge_chain_files(self.cfg, self.db, d["chain_id"])
             if d["mail_id"]:
                 self.db.update_mail(d["mail_id"], status="handled")
-                self.db.x("UPDATE todos SET status='done' WHERE mail_id=? AND status='open' AND origin_scope='auto'",
-                          (d["mail_id"],))
             if acct.save_to_sent and acct.sent_folder and acct.protocol == "imap":
                 try:
                     await asyncio.to_thread(append_to_sent, acct, msg)

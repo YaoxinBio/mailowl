@@ -48,9 +48,11 @@ def hr() -> dict:
 
 
 def button(label: str, value: dict, *, kind: str = "default", confirm: tuple[str, str] | None = None,
-           name: str | None = None, submit: bool = False) -> dict:
+           name: str | None = None, submit: bool = False, size: str | None = None) -> dict:
     b: dict[str, Any] = {"tag": "button", "text": _pt(label), "type": kind,
                          "behaviors": [{"type": "callback", "value": {**value, "n": next(_nonce)}}]}
+    if size:
+        b["size"] = size
     if confirm:
         b["confirm"] = {"title": _pt(confirm[0]), "text": _pt(confirm[1])}
     if name:
@@ -187,7 +189,9 @@ def body_card(m, body: str, truncated: bool) -> dict:
     return card(f'原文 · {m["subject"] or "(无主题)"}', "grey", els, subtitle=f'#{m["id"]}')
 
 
-def digest_card(title: str, groups: list[tuple[str, list[str]]], extra: list[str]) -> dict:
+def digest_card(title: str, groups: list[tuple[str, list[str]]], extra: list[str],
+                todos: list[dict] | None = None, *, todo_more: int = 0, expired: list[str] | None = None) -> dict:
+    """todos：[{"id", "text", "done"}]，没完成的每条带「完成」按钮；expired：这次自动收起的过期待办。"""
     els: list[dict] = []
     for name, lines in groups:
         if not lines:
@@ -197,6 +201,21 @@ def digest_card(title: str, groups: list[tuple[str, list[str]]], extra: list[str
         els.append(text("\n".join(shown) + (f"\n…另有 {len(lines) - 25} 封" if len(lines) > 25 else ""), size="notation"))
     if extra:
         els += [hr(), text("\n".join(extra))]
+    if todos:
+        els += [hr(), md(f"**待办**（{sum(not t['done'] for t in todos) + todo_more}）")]
+        for t in todos:
+            if t["done"]:
+                els.append(text(f"✅ {t['text']}", color="grey"))
+                continue
+            els.append({"tag": "column_set", "flex_mode": "none", "horizontal_spacing": "8px", "columns": [
+                {"tag": "column", "width": "weighted", "weight": 1, "vertical_align": "center",
+                 "elements": [text(f"☐ {t['text']}")]},
+                {"tag": "column", "width": "auto", "vertical_align": "center",
+                 "elements": [button("完成", {"a": "todo_done", "t": t["id"]}, size="small")]}]})
+        if todo_more:
+            els.append(note(f"还有 {todo_more} 条，发 /todo 查看"))
+    if expired:
+        els.append(note("已过期一天，自动收起：" + "；".join(expired)))
     els.append(note("回复「#编号 你的问题」可以针对某封邮件对话"))
     return card(title, "turquoise", els)
 
