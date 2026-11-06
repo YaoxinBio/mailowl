@@ -6,19 +6,26 @@
 """
 from __future__ import annotations
 
+import email
 import imaplib
 import logging
 import mimetypes
 import smtplib
 import ssl
 import time
-from email.message import EmailMessage
+from email import encoders, policy
+from email.header import Header
+from email.message import EmailMessage, Message
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from email.utils import formataddr, formatdate, getaddresses, make_msgid
 
 from .config import Account
 from .fetch import _quote_mailbox
 
 log = logging.getLogger(__name__)
+SEND_POLICY = policy.SMTP.clone(refold_source="none")
 
 
 class SendRejected(Exception):
@@ -33,16 +40,40 @@ def split_addrs(value: str | None) -> list[str]:
     return [a for _, a in getaddresses([value or ""]) if a and "@" in a]
 
 
+def _attachment_part(filename: str, data: bytes) -> MIMEBase:
+    """附件文件名用 RFC 2047（name= 与 filename= 都写），和 Coremail、Outlook、Gmail 网页版的做法一致。
+
+    Python 默认只写 RFC 2231 的 filename*0*=…; filename*1*=…（长中文名会被拆成多段），
+    华为等手机邮件客户端不认，收件人看到的附件是空的（2026-11-06 韩老师反馈）。
+    """
+    ctype, _ = mimetypes.guess_type(filename)
+    maintype, subtype = (ctype or "application/octet-stream").split("/", 1)
+    part = MIMEBase(maintype, subtype)
+    part.set_payload(data)
+    encoders.encode_base64(part)
+    enc = Header(filename, "utf-8").encode() if not filename.isascii() else filename
+    part.set_param("name", enc)
+    part.add_header("Content-Disposition", "attachment", filename=enc)
+    return part
+
+
 def build_message(acct: Account, *, to_addrs: str, cc_addrs: str, subject: str, body: str,
                   in_reply_to: str | None, refs: str | None,
                   attachments: list[tuple[str, bytes]] | None = None) -> EmailMessage:
-    msg = EmailMessage()
+    text = MIMEText(body, "plain", "utf-8")
+    if attachments:
+        msg: Message = MIMEMultipart("mixed")
+        msg.attach(text)
+        for filename, data in attachments:
+            msg.attach(_attachment_part(filename, data))
+    else:
+        msg = text
     msg["From"] = formataddr((acct.display_name, acct.address)) if acct.display_name else acct.address
     msg["To"] = ", ".join(split_addrs(to_addrs))
     cc = split_addrs(cc_addrs)
     if cc:
         msg["Cc"] = ", ".join(cc)
-    msg["Subject"] = subject
+    msg["Subject"] = Header(subject, "utf-8").encode() if not subject.isascii() else subject
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain=acct.address.split("@")[-1])
     if in_reply_to:
@@ -51,12 +82,8 @@ def build_message(acct: Account, *, to_addrs: str, cc_addrs: str, subject: str, 
         if in_reply_to not in chain:
             chain.append(in_reply_to)
         msg["References"] = " ".join(chain[-20:])
-    msg.set_content(body, charset="utf-8")
-    for filename, data in attachments or []:
-        ctype, _ = mimetypes.guess_type(filename)
-        maintype, subtype = (ctype or "application/octet-stream").split("/", 1)
-        msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
-    return msg
+    # 用 compat32 拼好的原文重新解析：调用方拿到 EmailMessage 的接口，再序列化时也不会把附件名改回 RFC 2231
+    return email.message_from_bytes(msg.as_bytes(), policy=SEND_POLICY)
 
 
 def send_message(acct: Account, msg: EmailMessage, timeout: int = 60) -> None:

@@ -488,3 +488,18 @@ def test_failed_bark_push_is_not_recorded(cfg, db):
     svc.bark_items.append(BarkItem(title="t", body="b", level="active", mail_id=1))
     run(svc.flush_bark())
     assert db.q1("SELECT COUNT(*) n FROM notifications WHERE channel='bark'")["n"] == 0
+
+
+def test_attachment_names_readable_by_phone_clients():
+    """长中文文件名不能只写 RFC 2231 分段（filename*0*=…）：华为手机邮件把这种附件显示为空。"""
+    from mailowl.smtp_send import build_message
+    acct = NS(display_name="张燿鑫", address="me@x.cn")
+    name = "进展报告_给韩老师_陆老师_20261106.docx"
+    raw = build_message(acct, to_addrs="a@x.cn", cc_addrs="", subject="进展报告", body="见附件", in_reply_to=None,
+                        refs=None, attachments=[(name, b"PK\x03\x04data")]).as_bytes()
+    head = raw.decode()
+    assert "filename*" not in head and "name*" not in head
+    assert 'name="=?utf-8?b?' in head and 'filename="=?utf-8?b?' in head
+    rec = parse_message(raw)
+    assert [a["filename"] for a in rec["attachments"]] == [name] and rec["subject"] == "进展报告"
+    assert "见附件" in rec["body_text"]
